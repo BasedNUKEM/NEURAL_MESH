@@ -228,5 +228,41 @@ class TestHelixaProvenance(unittest.TestCase):
         self.assertEqual(man["stamps"][0]["node_id"], a.id)
 
 
+class TestHybridRetrieval(unittest.TestCase):
+    def setUp(self):
+        self.m = Mesh(":memory:")
+        self.m.add("Maya's editor is Neovim.", MemoryType.SEMANTIC)
+        self.m.add("Maya lives in Berlin.", MemoryType.SEMANTIC)
+        self.m.add("Ravi prefers Vim.", MemoryType.SEMANTIC)
+        # superseded (stale) node that must never surface
+        old = self.m.add("Maya lives in Lisbon.", MemoryType.SEMANTIC)
+        cur = self.m.add("Maya lives in Amsterdam.", MemoryType.SEMANTIC)
+        self.m._supersede(old.id, cur)
+
+    def test_dense_recall_finds_semantic_match(self):
+        hits = self.m.dense_recall("Which editor does Maya use?", top_k=1)
+        self.assertEqual(len(hits), 1)
+        self.assertIn("Neovim", hits[0].content)
+
+    def test_lexical_recall_finds_exact_keyword(self):
+        hits = self.m.lexical_recall("Maya Berlin", top_k=1)
+        self.assertIn("Berlin", hits[0].content)
+
+    def test_hybrid_recall_skips_superseded(self):
+        hits = self.m.hybrid_recall("Where does Maya live now?", top_k=5)
+        contents = [h.content for h in hits]
+        joined = " ".join(contents)
+        self.assertIn("Amsterdam", joined)        # current fact present
+        self.assertNotIn("Lisbon", joined)        # stale (superseded) skipped
+        # the stale node must never outrank a live one
+        self.assertNotIn("Maya lives in Lisbon.", contents[:3])
+
+    def test_alpha_extremes_match_pure_modes(self):
+        q = "What does Ravi use?"
+        dense_top = self.m.dense_recall(q, top_k=1)[0].content
+        hybrid_dense = self.m.hybrid_recall(q, top_k=1, alpha=1.0)[0].content
+        self.assertEqual(dense_top, hybrid_dense)
+
+
 if __name__ == "__main__":
     unittest.main()
