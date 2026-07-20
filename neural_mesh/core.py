@@ -160,6 +160,68 @@ class Mesh:
                 promoted += 1
         return {"pruned": pruned, "insights": len(insights)}
 
+    # ---------- DISTILL: LoRA-ready output ----------
+    def distill(self, min_trust: float = 0.6, min_resonance: float = 0.1,
+                as_pairs: bool = True) -> dict:
+        """Produce a LoRA-ready distillation of the surviving mesh.
+
+        The idea: after sleep consolidation, the mesh holds *curated* truth
+        (stale pruned, high-trust kept, consensus resolved). That curated set is
+        exactly the kind of clean, high-signal (instruction, response) data a
+        LoRA adapter wants — instead of finetuning on raw noisy conversation
+        logs, you finetune on the agent's *consolidated memory*.
+
+        What counts:
+          * high-trust + high-resonance live (non-archived) nodes
+          * procedural nodes -> "how do I ...?" -> step text
+          * semantic/consensus nodes -> "what is ...?" -> asserted fact
+          * corroborated (agent_id has '+') get a bonus weight
+
+        Returns a dict with `pairs` (list of {instruction, response, weight,
+        meta}) and a `jsonl` string ready to write to a .jsonl LoRA file.
+        """
+        nodes = self._load()
+        live = [n for n in nodes.values()
+                if not n.superseded_by
+                and n.trust >= min_trust
+                and n.resonance >= min_resonance]
+        pairs = []
+        for n in live:
+            # corroborated knowledge is worth more signal
+            weight = round(n.trust * (1.0 + 0.25 * ("+" in n.agent_id)), 3)
+            if n.type == MemoryType.PROCEDURAL:
+                instruction = f"How do I {n.content.split(':')[0].strip().lower()}?"
+                response = n.content
+            elif n.type == MemoryType.SEMANTIC:
+                instruction = f"What is known about: {n.content[:60]}?"
+                response = n.content
+            elif n.type == MemoryType.EPISODIC:
+                instruction = "Recall the relevant episode."
+                response = n.content
+            elif n.type == MemoryType.PROSPECTIVE:
+                instruction = "What should be done / remembered for later?"
+                response = n.content
+            else:  # SENSORY / default
+                instruction = "Context:"
+                response = n.content
+            pairs.append({
+                "instruction": instruction,
+                "response": response,
+                "weight": weight,
+                "meta": {
+                    "type": n.type.value,
+                    "trust": n.trust,
+                    "resonance": round(n.resonance, 3),
+                    "agent_id": n.agent_id,
+                    "conflict_group": n.conflict_group,
+                },
+            })
+        # sort by weight desc so a LoRA trainer can truncate by signal
+        pairs.sort(key=lambda p: -p["weight"])
+        import json as _json
+        jsonl = "\n".join(_json.dumps(p, ensure_ascii=False) for p in pairs)
+        return {"count": len(pairs), "pairs": pairs, "jsonl": jsonl}
+
     # ---------- stats ----------
     def stats(self) -> dict:
         nodes = self._load()

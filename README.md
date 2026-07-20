@@ -234,6 +234,32 @@ consensus kept both contradictors and surfaced the 0.9-trust claim over 0.4;
 trust capping pulled an untrusted peer's 1.0 down to 0.2.
 
 > Reproduce: `PYTHONPATH=. python bench/sharing_bench.py`
+> Live demo: `PYTHONPATH=. python -m neural_mesh.cross_agent_demo`
+
+### LoRA-ready sleep distillation ✅
+
+After sleep consolidation, the mesh is *curated* truth (stale pruned, high-trust
+kept, consensus resolved). That curated set is exactly the clean, high-signal
+`(instruction, response)` data a LoRA adapter wants — instead of finetuning on
+raw noisy logs, you finetune on the agent's **consolidated memory**.
+
+```python
+mesh.sleep()                       # prune + reflect
+ds = mesh.distill(min_trust=0.6)   # -> {pairs, jsonl}
+write_hf_jsonl(mesh, "lora.jsonl") # Alpaca-style for PEFT
+```
+
+* high-trust + high-resonance live nodes become training pairs
+* corroborated (`agent_id` has `+`) get a **bonus weight** so the adapter
+  learns agreed-upon truth stronger than single-agent claims
+* outputs: native JSONL (with `weight`+`meta`), Alpaca/HF `jsonl`, and a
+  per-example weight-`TAB`-separated file for sample-weighted trainers
+
+Bench result (reproducible): 3 examples from a 5-node mesh; stale + low-trust
+nodes excluded; corroborated weight `1.188` > single-agent `0.9`; both JSONL
+formats parse and validate.
+
+> Reproduce: `PYTHONPATH=. python bench/distill_bench.py`
 
 ---
 
@@ -247,7 +273,7 @@ trust capping pulled an untrusted peer's 1.0 down to 0.2.
 - [x] `.mesh` portable interchange format
 - [x] Cross-agent mesh sharing + consensus
 - [x] Real LoCoMo eval harness (mini-fixture live; `--locomo` full-set ready)
-- [ ] LoRA-ready sleep output (distill patterns into an adapter)
+- [x] LoRA-ready sleep distillation (consolidated-memory finetune data)
 - [ ] Rust hot path for large meshes
 - [ ] Helixa / Agent Aura provenance (Base L2, optional)
 

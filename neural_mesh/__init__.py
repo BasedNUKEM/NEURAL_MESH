@@ -18,7 +18,9 @@ Run `python -m neural_mesh.demo` to see it work.
 from .core import Mesh, MemoryType
 from .meshfile import export_mesh, import_mesh
 from .sharing import merge_peer_mesh, consensus_rank, PeerPolicy, export_for_peer
+from .lora_dataset import write_jsonl, write_hf_jsonl, write_weights, summarize
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
-           "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer"]
-__version__ = "0.2.0"
+           "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
+           "write_jsonl", "write_hf_jsonl", "write_weights", "summarize"]
+__version__ = "0.3.0"
