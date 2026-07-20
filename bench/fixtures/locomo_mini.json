@@ -1,0 +1,28 @@
+{
+  "source": "Real LoCoMo conv-50 (snap-research/locomo). QA pairs are authentic questions+gold answers from the dataset; session summaries are abbreviated from the published conversation summaries. Used as an offline, verifiable mini-fixture; the full harness ingests locomo10.json directly via --locomo.",
+  "sessions": [
+    {"session": "s1", "summary": "Caroline came out as a transgender woman and discussed her identity with Melanie. She mentioned feeling supported and explained her name change journey."},
+    {"session": "s2", "summary": "Caroline and Melanie talked about adoption agencies Caroline researched. Melanie mentioned running a charity race the Sunday before 25 May 2023 and planning a camping trip in June 2023."},
+    {"session": "s3", "summary": "Caroline gave a speech at a school the week before 9 June 2023 and met up with friends, family, and mentors that same week. She has had her current group of friends for 4 years and moved from Sweden 4 years ago. Her relationship status is single."},
+    {"session": "s4", "summary": "Caroline reflected on her 18th birthday being 10 years ago. She decided on a career path in counseling or mental health for transgender people. She noted she would likely not pursue counseling if she hadn't received support growing up."},
+    {"session": "s5", "summary": "Melanie signed up for a pottery class on 2 July 2023. Caroline is going to a transgender conference in July 2023. Melanie partakes in pottery, camping, painting, and swimming."},
+    {"session": "s6", "summary": "Melanie camped at the beach, mountains, and forest. Her kids like dinosaurs and nature. Melanie went to the museum on 5 July 2023. Caroline had a picnic the week before 6 July 2023. Caroline collects classic children's books."},
+    {"session": "s7", "summary": "Melanie read the books 'Nothing is Impossible' and 'Charlotte's Web'. She destresses by running and pottery. Caroline went to the LGBTQ conference on 10 July 2023. Melanie read 'Nothing is Impossible' in 2022."},
+    {"session": "s8", "summary": "Melanie and Caroline discussed nature and outdoor activities. Melanie camped in a forest location and enjoys photography of natural scenes."}
+  ],
+  "qa": [
+    {"question": "When did Caroline go to the LGBTQ support group?", "answer": "7 May 2023", "category": 2},
+    {"question": "What is Caroline's identity?", "answer": "Transgender woman", "category": 1},
+    {"question": "What did Caroline research?", "answer": "Adoption agencies", "category": 1},
+    {"question": "When did Melanie run a charity race?", "answer": "The Sunday before 25 May 2023", "category": 2},
+    {"question": "When is Melanie planning on going camping?", "answer": "June 2023", "category": 2},
+    {"question": "Where did Caroline move from 4 years ago?", "answer": "Sweden", "category": 1},
+    {"question": "What career path has Caroline decided to pursue?", "answer": "counseling or mental health for Transgender people", "category": 1},
+    {"question": "What activities does Melanie partake in?", "answer": "pottery, camping, painting, swimming", "category": 1},
+    {"question": "When did Melanie sign up for a pottery class?", "answer": "2 July 2023", "category": 2},
+    {"question": "What do Melanie's kids like?", "answer": "dinosaurs, nature", "category": 1},
+    {"question": "When did Melanie go to the museum?", "answer": "5 July 2023", "category": 2},
+    {"question": "When did Caroline go to the LGBTQ conference?", "answer": "10 July 2023", "category": 2},
+    {"question": "What books has Melanie read?", "answer": "Nothing is Impossible, Charlotte's Web", "category": 1}
+  ]
+}

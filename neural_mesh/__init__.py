@@ -16,6 +16,7 @@ Run `python -m neural_mesh.demo` to see it work.
 """
 
 from .core import Mesh, MemoryType
+from .meshfile import export_mesh, import_mesh
 
-__all__ = ["Mesh", "MemoryType"]
+__all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh"]
 __version__ = "0.1.0"

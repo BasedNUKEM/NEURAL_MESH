@@ -1,7 +1,8 @@
 # NEURAL_MESH — launch copy
 
-> Status: DRAFT. Repo not yet created. These are ready-to-post assets for when
-> the user gives the GitHub GO.
+> Status: LIVE. Repo is public at https://github.com/BasedNUKEM/NEURAL_MESH
+> (all D0xedDev repos live under the BasedNUKEM account per standing convention).
+> These are the posted launch assets.
 
 ---
 
@@ -51,7 +52,7 @@ it's not just versioning. NEURAL_MESH models memory like cognition:
 zero deps to run the core. pure stdlib. real embeddings optional (no torch).
 it's fork-shaped off @NousResearch hermes-agent + the Sibyl / Tony-Simons memory
 practices we already run. now it's open, and it's better.
-👉 github.com/D0xedDev/NEURAL_MESH
+👉 github.com/BasedNUKEM/NEURAL_MESH
 
 **6/**
 roadmap: portable `.mesh` interchange, cross-agent mesh sharing + consensus,
