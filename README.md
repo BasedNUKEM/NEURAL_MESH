@@ -209,6 +209,32 @@ other = Mesh(":memory:"); import_mesh("agent.mesh", other)   # re-embeds for oth
 
 > Reproduce: `PYTHONPATH=. python -c "from neural_mesh import *; ..."` (round-trip verified in CI-less local run)
 
+### Cross-agent sharing ✅
+
+Agents can pool memory via the `.mesh` format, but naive pooling is dangerous —
+duplicate facts, contradictory facts, and untrusted sources. NEURAL_MESH sharing
+rests on three primitives (see `neural_mesh/sharing.py`):
+
+* **Corroboration** — identical facts from two agents *fuse*: trust rises by
+  `1 - (1-t_a)(1-t_b)` and the link set unions. No duplicates.
+* **Consensus** — contradictory facts sharing a `conflict_group` are *not*
+  overwritten; the highest-trust claim wins and the loser is retained-but-
+  demoted (visible, never silently dropped).
+* **Trust capping** — a per-peer `PeerPolicy` scales/caps incoming trust, so an
+  untrusted peer can't override local truth.
+
+```python
+from neural_mesh import Mesh, merge_peer_mesh, PeerPolicy, export_for_peer
+export_for_peer(agent_a, "a.mesh", "agent_a")
+merge_peer_mesh(agent_b, "a.mesh", "agent_a", policy=PeerPolicy(trust=1.0))
+```
+
+Bench result (reproducible): corroboration fused 1→1 node (trust 0.7→0.94);
+consensus kept both contradictors and surfaced the 0.9-trust claim over 0.4;
+trust capping pulled an untrusted peer's 1.0 down to 0.2.
+
+> Reproduce: `PYTHONPATH=. python bench/sharing_bench.py`
+
 ---
 
 ## Roadmap
@@ -219,7 +245,7 @@ other = Mesh(":memory:"); import_mesh("agent.mesh", other)   # re-embeds for oth
 - [x] Pointer protocol (keep big output out of context)
 - [x] Versioning / `supersedes` (no stale truth)
 - [x] `.mesh` portable interchange format
-- [ ] Cross-agent mesh sharing + consensus
+- [x] Cross-agent mesh sharing + consensus
 - [x] Real LoCoMo eval harness (mini-fixture live; `--locomo` full-set ready)
 - [ ] LoRA-ready sleep output (distill patterns into an adapter)
 - [ ] Rust hot path for large meshes

@@ -81,6 +81,8 @@ def export_mesh(mesh, path: str) -> dict:
                     "lane": n.lane,
                     "version": n.version,
                     "superseded_by": n.superseded_by,
+                    "agent_id": n.agent_id,
+                    "conflict_group": n.conflict_group,
                 },
             }
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -127,6 +129,8 @@ def import_mesh(path: str, mesh, *, reembed: bool = True) -> dict:
             node.lane = m.get("lane", "hot")
             node.version = m.get("version", 1)
             node.superseded_by = m.get("superseded_by", "")
+            node.agent_id = m.get("agent_id", "")
+            node.conflict_group = m.get("conflict_group", "")
             mesh._save(node)
             loaded += 1
     return {"loaded": loaded,

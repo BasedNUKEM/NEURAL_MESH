@@ -17,6 +17,8 @@ Run `python -m neural_mesh.demo` to see it work.
 
 from .core import Mesh, MemoryType
 from .meshfile import export_mesh, import_mesh
+from .sharing import merge_peer_mesh, consensus_rank, PeerPolicy, export_for_peer
 
-__all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh"]
-__version__ = "0.1.0"
+__all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
+           "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer"]
+__version__ = "0.2.0"

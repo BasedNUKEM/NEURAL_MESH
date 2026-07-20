@@ -61,10 +61,13 @@ class Mesh:
     # ---------- write ----------
     def add(self, content: str, type: MemoryType = MemoryType.SEMANTIC,
             lane: str = "hot", provenance: str = "", prospective_at: float = 0.0,
-            supersedes: str = "", **meta) -> MemoryNode:
+            supersedes: str = "", agent_id: str = "", trust: float = 1.0,
+            conflict_group: str = "", **meta) -> MemoryNode:
         emb = self.embedder(content)
         node = MemoryNode(id="", type=type, content=content, embedding=emb,
-                          lane=lane, provenance=provenance)
+                          lane=lane, provenance=provenance,
+                          agent_id=agent_id, trust=trust,
+                          conflict_group=conflict_group)
         if prospective_at:
             node.links["__prospective_at__"] = prospective_at
         self._save(node)

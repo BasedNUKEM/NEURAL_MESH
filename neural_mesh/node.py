@@ -32,6 +32,8 @@ class MemoryNode:
     lane: str = "hot"            # "hot" (short-term) or "cold" (long-term)
     version: int = 1
     superseded_by: str = ""
+    agent_id: str = ""           # contributor agent id ("" = local/self)
+    conflict_group: str = ""     # shared id linking contradictory nodes
 
     def __post_init__(self):
         if not self.created_at:
@@ -61,6 +63,8 @@ class MemoryNode:
                 "lane": self.lane,
                 "version": self.version,
                 "superseded_by": self.superseded_by,
+                "agent_id": self.agent_id,
+                "conflict_group": self.conflict_group,
             },
         )
 
@@ -83,4 +87,6 @@ class MemoryNode:
         n.lane = meta.get("lane", "hot")
         n.version = meta.get("version", 1)
         n.superseded_by = meta.get("superseded_by", "")
+        n.agent_id = meta.get("agent_id", "")
+        n.conflict_group = meta.get("conflict_group", "")
         return n
