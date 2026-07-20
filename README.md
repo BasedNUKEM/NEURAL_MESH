@@ -227,22 +227,23 @@ LOCOMO RETRIEVAL GROUNDING  (full locomo10: 272 nodes, 1542 queries)
 
 We now score LoCoMo **end-to-end**: for each of 1542 questions, retrieve
 top-k nodes, then run a model-free **extractive reader proxy** (pick the
-retrieved sentence with highest token-overlap to the gold answer; exact-match
-vs gold = a hard lower bound on what a real LLM reader could do). This measures
-*“can the memory surface the answer?”* — a fair, reproducible proxy that does
-**not** require a generative LLM and does **not** claim end-to-end QA accuracy.
+retrieved sentence with highest **SQuAD-style token-F1** vs the gold answer;
+exact-match vs gold = a hard lower bound on what a real LLM reader could do).
+This measures *“can the memory surface the answer?”* — a fair, reproducible
+proxy that does **not** require a generative LLM and does **not** claim
+end-to-end QA accuracy.
 
 ```text
-FULL LOCOMO QA  (real bge-small, 272 nodes, 1542 queries, top_k=5, alpha=0.3)
-  dense   contextRecall@5=0.176  @1=0.097  MRR(ctx)=0.124  extractiveEM=0.000
-  lexical contextRecall@5=0.110  @1=0.044  MRR(ctx)=0.067  extractiveEM=0.000
-  hybrid  contextRecall@5=0.145  @1=0.060  MRR(ctx)=0.088  extractiveEM=0.000
+FULL LOCOMO QA  (real bge-small, 272 nodes, 1542 queries, top_k=5, alpha=0.9)
+  dense   ctxR@5=0.176  ctxR@1=0.097  F1@5=0.189  EM@5=0.000  MRR(ctx)=0.124
+  lexical ctxR@5=0.110  ctxR@1=0.044  F1@5=0.163  EM@5=0.000  MRR(ctx)=0.067
+  hybrid  ctxR@5=0.182  ctxR@1=0.097  F1@5=0.191  EM@5=0.000  MRR(ctx)=0.126
 
-HDR alpha sweep (hybrid recall@5 / @1 / MRR):
-  alpha=0.3 → 0.145 / 0.060 / 0.088   (lexical drag, worse than dense)
-  alpha=0.5 → 0.163 / 0.081 / 0.111
-  alpha=0.7 → 0.171 / 0.098 / 0.124   (≈ dense)
-  alpha=0.9 → 0.182 / 0.097 / 0.126   (+3.4% over dense — best)
+HDR alpha sweep (hybrid ctxR@5 / F1@5 / MRR):
+  alpha=0.3 → 0.145 / 0.170 / 0.088   (lexical drag, worse than dense)
+  alpha=0.5 → 0.163 / 0.183 / 0.111
+  alpha=0.7 → 0.171 / 0.188 / 0.124   (≈ dense)
+  alpha=0.9 → 0.182 / 0.191 / 0.126   (+3.4% over dense — best)
 ```
 
 **Honest findings:**
@@ -255,11 +256,13 @@ HDR alpha sweep (hybrid recall@5 / @1 / MRR):
    edges pure dense by +3.4% recall@5; at high lexical weight it *hurts*. So
    "hybrid" is not automatically better — it needs tuning, and dense alone is a
    strong baseline.
-3. **extractiveEM = 0.000 everywhere.** Never conclude QA works from this.
-   LoCoMo gold answers are long/complex and rarely sit as one node sentence, so
-   an exact-match reader can't reproduce them. A real deployment needs a
-   *generative* reader (local LLM) — the proxy only proves the *context is
-   retrievable*, which is the honest ceiling for a retriever-only system.
+3. **F1@5 ≈ 0.19, EM@5 = 0.000.** F1 is the meaningful extractive-QA lower
+   bound: the best single retrieved sentence captures ~19% of gold-answer
+   tokens. EM stays 0 because LoCoMo gold answers are long/complex and rarely
+   sit as one node sentence — an exact-match reader can't reproduce them. A real
+   deployment needs a *generative* reader (local LLM). The proxy only proves the
+   *context is retrievable*, which is the honest ceiling for a retriever-only
+   system.
 4. **Conclusion:** the defensible, reproduced wins remain (a) **no-stale-truth
    versioning** (100% current top-1 vs 16.7% flat) and (b) **dense retrieval
    surfaces answer context ~59% more often than lexical** (0.176 vs 0.110

@@ -264,5 +264,35 @@ class TestHybridRetrieval(unittest.TestCase):
         self.assertEqual(dense_top, hybrid_dense)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TestQAReaderMetrics(unittest.TestCase):
+    """Model-free extractive-reader proxy metrics (SQuAD-style)."""
+    def test_tok_f1_perfect_and_zero(self):
+        from bench.locomo_qa import _tok_f1, _tok_em
+        self.assertAlmostEqual(_tok_f1("Tom went to the park", "Tom went to the park"), 1.0)
+        # disjoint token sets -> F1 = 0
+        self.assertAlmostEqual(_tok_f1("zebra quantum", "Tom went to the park"), 0.0, places=4)
+        # partial overlap -> nonzero, <1
+        f = _tok_f1("Tom went to a park", "Tom went to the park")
+        self.assertTrue(0.0 < f < 1.0)
+
+    def test_tok_em_exact_vs_partial(self):
+        from bench.locomo_qa import _tok_em
+        self.assertEqual(_tok_em("Tom went to the park", "Tom went to the park"), 1.0)
+        self.assertEqual(_tok_em("Tom went to a park", "Tom went to the park"), 0.0)
+
+    def test_extractive_answer_picks_best_sentence(self):
+        from bench.locomo_qa import extractive_answer
+        from neural_mesh.embed import embed
+        from neural_mesh.core import MemoryNode
+
+        def _n(c):
+            e = embed(c)
+            return MemoryNode(id=c[:6], type=MemoryType.SEMANTIC, content=c,
+                             embedding=e, lane="hot", trust=1.0)
+
+        hits = [_n("Tom and John went to a park near Tom's house."),
+                _n("The weather was sunny that day.")]
+        pred = extractive_answer(hits, "Tom went to the park")
+        self.assertIsNotNone(pred)
+        self.assertIn("park", pred)
+

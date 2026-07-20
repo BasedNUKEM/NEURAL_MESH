@@ -29,4 +29,4 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "write_jsonl", "write_hf_jsonl", "write_weights", "summarize",
            "HelixaStamp", "stamp_node", "verify_stamp", "aura_trust_weight",
            "export_manifest", "make_stamp"]
-__version__ = "0.5.0"
+__version__ = "0.6.0"
