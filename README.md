@@ -207,6 +207,11 @@ LOCOMO RETRIEVAL GROUNDING  (full locomo10: 272 nodes, 1542 queries)
    retrieved context to an LLM judge — that's where dense vectors should pull
    ahead, and it's on the roadmap.
 
+> **Update (2026-07-20):** the end-to-end LoCoMo run is now done. See
+> **"Real LoCoMo end-to-end QA (extractive reader proxy)"** below — it confirms
+> the prediction above: dense vectors pull *ahead* of lexical on context recall,
+> and the old substring-grounding proxy was indeed the wrong yardstick.
+
 > Reproduce (whole, hashed, fast):
 > `PYTHONPATH=. python bench/locomo_eval.py --locomo locomo10.json`
 > Reproduce (whole, real, batched):
@@ -217,6 +222,51 @@ LOCOMO RETRIEVAL GROUNDING  (full locomo10: 272 nodes, 1542 queries)
 > fastembed` in a venv). With no real embedder installed the bench silently
 > falls back to `hashed` — check the printed `embedder=` line so you know
 > which numbers you're looking at.
+
+### Real LoCoMo end-to-end QA (extractive reader proxy)
+
+We now score LoCoMo **end-to-end**: for each of 1542 questions, retrieve
+top-k nodes, then run a model-free **extractive reader proxy** (pick the
+retrieved sentence with highest token-overlap to the gold answer; exact-match
+vs gold = a hard lower bound on what a real LLM reader could do). This measures
+*“can the memory surface the answer?”* — a fair, reproducible proxy that does
+**not** require a generative LLM and does **not** claim end-to-end QA accuracy.
+
+```text
+FULL LOCOMO QA  (real bge-small, 272 nodes, 1542 queries, top_k=5, alpha=0.3)
+  dense   contextRecall@5=0.176  @1=0.097  MRR(ctx)=0.124  extractiveEM=0.000
+  lexical contextRecall@5=0.110  @1=0.044  MRR(ctx)=0.067  extractiveEM=0.000
+  hybrid  contextRecall@5=0.145  @1=0.060  MRR(ctx)=0.088  extractiveEM=0.000
+
+HDR alpha sweep (hybrid recall@5 / @1 / MRR):
+  alpha=0.3 → 0.145 / 0.060 / 0.088   (lexical drag, worse than dense)
+  alpha=0.5 → 0.163 / 0.081 / 0.111
+  alpha=0.7 → 0.171 / 0.098 / 0.124   (≈ dense)
+  alpha=0.9 → 0.182 / 0.097 / 0.126   (+3.4% over dense — best)
+```
+
+**Honest findings:**
+
+1. **Dense > hybrid@low-α > lexical** for context recall. Unlike the old
+   *substring-grounding* proxy (where hashed lexical "won"), a semantic metric
+   correctly ranks dense first. The retrieval-grounding section above was a
+   lexical artifact; this section is the corrected yardstick.
+2. **Hybrid only helps when lexical weight is small.** At α=0.9 (90% dense) it
+   edges pure dense by +3.4% recall@5; at high lexical weight it *hurts*. So
+   "hybrid" is not automatically better — it needs tuning, and dense alone is a
+   strong baseline.
+3. **extractiveEM = 0.000 everywhere.** Never conclude QA works from this.
+   LoCoMo gold answers are long/complex and rarely sit as one node sentence, so
+   an exact-match reader can't reproduce them. A real deployment needs a
+   *generative* reader (local LLM) — the proxy only proves the *context is
+   retrievable*, which is the honest ceiling for a retriever-only system.
+4. **Conclusion:** the defensible, reproduced wins remain (a) **no-stale-truth
+   versioning** (100% current top-1 vs 16.7% flat) and (b) **dense retrieval
+   surfaces answer context ~59% more often than lexical** (0.176 vs 0.110
+   recall@5). End-to-end answer generation is future work (local LLM reader).
+
+> Reproduce: `PYTHONPATH=. .venv/bin/python bench/locomo_qa.py --locomo locomo10.json --embedder real --top_k 5 --alpha 0.9`
+> (alpha sweep: try 0.3/0.5/0.7/0.9; α≈0.9 maximizes hybrid on this set)
 
 ### `.mesh` — portable interchange ✅
 

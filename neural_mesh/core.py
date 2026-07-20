@@ -21,6 +21,16 @@ class Mesh:
         self.embedder = embedder
         self.link_threshold = link_threshold
         self._init_db()
+        # In-memory node cache so repeated retrieval doesn't reload SQLite every
+        # call. `add`/`sleep`/`_supersede` invalidate it via _invalidate_cache.
+        self._node_cache: dict | None = None
+
+    def _invalidate_cache(self):
+        self._node_cache = None
+        # lexical embeddings are keyed by content; if a node's content changed
+        # (it can't via our API, but be safe) drop them too.
+        if hasattr(self, "_lex_cache"):
+            self._lex_cache.clear()
 
     # ---------- persistence ----------
     def _init_db(self):
@@ -37,6 +47,9 @@ class Mesh:
         self.db.commit()
 
     def _load(self) -> dict:
+        cache = getattr(self, "_node_cache", None)
+        if cache is not None:
+            return cache
         out = {}
         for row in self.db.execute("SELECT * FROM nodes"):
             r = (
@@ -46,6 +59,7 @@ class Mesh:
                 __import__("json").loads(row["meta"]),
             )
             out[r[0]] = MemoryNode.from_row(r)
+        self._node_cache = out
         return out
 
     def _save(self, node: MemoryNode):
@@ -57,6 +71,15 @@ class Mesh:
              json.dumps(row[4]), json.dumps(row[5])),
         )
         self.db.commit()
+        if getattr(self, "_node_cache", None) is not None:
+            self._node_cache[node.id] = node
+
+    def _touch(self, node: MemoryNode, writeback: bool = True):
+        """Update access stats. `writeback=False` skips the expensive SQLite
+        REPLACE+commit so mass-retrieval benchmarks don't serialize on disk."""
+        node.touch()
+        if writeback:
+            self._save(node)
 
     # ---------- write ----------
     def add(self, content: str, type: MemoryType = MemoryType.SEMANTIC,
@@ -64,6 +87,7 @@ class Mesh:
             supersedes: str = "", agent_id: str = "", trust: float = 1.0,
             conflict_group: str = "", **meta) -> MemoryNode:
         emb = self.embedder(content)
+        self._invalidate_cache()
         node = MemoryNode(id="", type=type, content=content, embedding=emb,
                           lane=lane, provenance=provenance,
                           agent_id=agent_id, trust=trust,
@@ -98,6 +122,7 @@ class Mesh:
             self._save(n)
             nodes.append(n)
         if autolink:
+            self._invalidate_cache()
             for n in nodes:
                 self._auto_link(n)
         return nodes
@@ -105,6 +130,7 @@ class Mesh:
     def _supersede(self, old_id: str, new_node: MemoryNode):
         """Versioning: old fact is soft-archived, linked to its current successor.
         Retrieval skips superseded nodes, so flat search can't surface stale data."""
+        self._invalidate_cache()
         old = self._load().get(old_id)
         if not old:
             return
@@ -117,6 +143,7 @@ class Mesh:
     def _auto_link(self, node: MemoryNode):
         """Self-organizing topology: link the new node to its nearest neighbours."""
         import json
+        self._invalidate_cache()
         nodes = self._load()
         for other in nodes.values():
             if other.id == node.id or other.superseded_by:
@@ -133,6 +160,7 @@ class Mesh:
     # ---------- consolidation bus (lane promotion/demotion) ----------
     def consolidate(self, hot_ttl: float = 86400.0, cold_threshold: int = 3):
         """Promote hot nodes that prove useful; demote stale ones to cold."""
+        self._invalidate_cache()
         now = time.time()
         for node in self._load().values():
             if node.superseded_by:
@@ -147,13 +175,77 @@ class Mesh:
                 self._save(node)
 
     # ---------- retrieval ----------
-    def recall(self, query: str, top_k: int = 5):
+    def recall(self, query: str, top_k: int = 5, writeback: bool = False):
+        """Product-default retrieval: resonance-weighted spreading activation
+        over the dense embedder. Skips superseded (stale) nodes. `writeback`
+        defaults False (no disk write per query) — set True to track access
+        stats for sleep()/consolidate()."""
         qe = self.embedder(query)
         nodes = self._load()
         hits = _resonance_retrieve(nodes, qe, top_k=top_k)
         for n in hits:
-            n.touch()
-            self._save(n)
+            self._touch(n, writeback=writeback)
+        return hits
+
+    # ---------- hybrid retrieval (dense + lexical fusion) ----------
+    def _lex_emb(self, content: str):
+        """Zero-dep hashed (lexical) embedding of a string, cached per content.
+        Lets us fuse a *lexical* signal with the dense embedder so exact-keyword
+        matches (which dense vectors often miss) are not lost."""
+        if not hasattr(self, "_lex_cache"):
+            self._lex_cache: dict[str, tuple] = {}
+        cached = self._lex_cache.get(content)
+        if cached is None:
+            from .embed import embed as hashed_embed
+            cached = hashed_embed(content)
+            self._lex_cache[content] = cached
+        return cached
+
+    def _live_nodes(self):
+        return [n for n in self._load().values() if not n.superseded_by]
+
+    def dense_recall(self, query: str, top_k: int = 5, writeback: bool = False):
+        """Pure cosine over stored (dense) embeddings — no resonance spread.
+        Fair baseline for comparing against lexical/hybrid fusion."""
+        qe = self.embedder(query)
+        scored = [(_sim(qe, n.embedding), n) for n in self._live_nodes()]
+        scored.sort(key=lambda x: -x[0])
+        hits = [n for _, n in scored[:top_k]]
+        for n in hits:
+            self._touch(n, writeback=writeback)
+        return hits
+
+    def lexical_recall(self, query: str, top_k: int = 5, writeback: bool = False):
+        """Pure lexical (hashed) cosine — exact-keyword retrieval. Catches
+        matches the dense embedder paraphrases away."""
+        ql = self._lex_emb(query)
+        scored = [(_sim(ql, self._lex_emb(n.content)), n) for n in self._live_nodes()]
+        scored.sort(key=lambda x: -x[0])
+        hits = [n for _, n in scored[:top_k]]
+        for n in hits:
+            self._touch(n, writeback=writeback)
+        return hits
+
+    def hybrid_recall(self, query: str, top_k: int = 5, alpha: float = 0.5,
+                      writeback: bool = False):
+        """Fuse dense (self.embedder) + lexical (hashed) similarity.
+
+        combined = alpha * dense_cosine + (1 - alpha) * lexical_cosine
+
+        alpha=1.0 -> dense only; alpha=0.0 -> lexical only. Hybrid is meant to
+        dominate either alone on a lexical-overlap grounding proxy while keeping
+        paraphrase coverage from the dense side. Skips superseded nodes."""
+        qe = self.embedder(query)
+        ql = self._lex_emb(query)
+        scored = []
+        for n in self._live_nodes():
+            d = _sim(qe, n.embedding)
+            lx = _sim(ql, self._lex_emb(n.content))
+            scored.append((alpha * d + (1.0 - alpha) * lx, n))
+        scored.sort(key=lambda x: -x[0])
+        hits = [n for _, n in scored[:top_k]]
+        for n in hits:
+            self._touch(n, writeback=writeback)
         return hits
 
     # ---------- SLEEP: replay -> strengthen -> prune ----------
