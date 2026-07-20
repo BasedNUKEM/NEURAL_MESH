@@ -15,8 +15,17 @@ import os
 import tempfile
 
 from neural_mesh.core import Mesh, MemoryType
-from neural_mesh.embed import cosine
+from neural_mesh.embed import cosine, embed
 from neural_mesh.embed_real import RealEmbedder
+import sys
+
+
+def _pick_embedder():
+    # Default to the zero-dep hashed embedder: this is a *versioning* test,
+    # embedding quality is irrelevant. Pass --embedder real for dense vectors.
+    if "--embedder" in sys.argv and "real" in sys.argv:
+        return RealEmbedder()
+    return embed  # the built-in zero-dep hashed embedder
 
 # A persona that changes over time (the realistic agent case)
 TIMELINE = [
@@ -56,7 +65,7 @@ def flat_rank(mesh, q, k=5, include_superseded=False):
 
 def main():
     tmp = tempfile.mkdtemp()
-    mesh = Mesh(db_path=os.path.join(tmp, "ver.db"), embedder=RealEmbedder())
+    mesh = Mesh(db_path=os.path.join(tmp, "ver.db"), embedder=_pick_embedder())
     print(f"[*] building UPDATE-heavy corpus ({len(TIMELINE)} writes, 6 updates)...")
     ids = []
     for content, t, sup in TIMELINE:

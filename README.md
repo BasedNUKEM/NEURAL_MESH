@@ -85,7 +85,7 @@ only what's *current and relevant*.
 Zero dependencies to run the core + demo:
 
 ```bash
-git clone https://github.com/D0xedDev/NEURAL_MESH
+git clone https://github.com/BasedNUKEM/NEURAL_MESH
 cd NEURAL_MESH
 python -m neural_mesh.demo          # pure stdlib, no pip needed
 ```
@@ -125,7 +125,10 @@ m.add("Maya's editor is Neovim.", MemoryType.SEMANTIC, supersedes=old.id)
 
 # 4. sleep — prune + reflect
 m.sleep(reflect_fn=lambda nodes: ["insight: deploys need a known git author"])
-```
+
+# 5. bulk ingest — batched embedding for large corpora (e.g. LoCoMo)
+m.add_many(sentence_list, type=MemoryType.SEMANTIC, autolink=False)
+
 
 ---
 
@@ -168,30 +171,52 @@ would be dishonest. The mesh's edge is *precision under conflict* (above) and
 
 > Reproduce: `PYTHONPATH=. .venv/bin/python bench/locomo_hard.py`
 
-### Real LoCoMo retrieval grounding
+### Real LoCoMo retrieval grounding (full locomo10)
 
-Using **authentic LoCoMo conv-50 QA** (snap-research), we score whether the gold
-answer string is *in the retrieved top-k context* (retrieval grounding — the
-input to an LLM answerer, not end-to-end QA accuracy). The shipped mini-fixture
-mirrors conv-50; `--locomo locomo10.json` scores all 10 conversations.
+Using authentic **LoCoMo-10** (snap-research, all 10 conversations: 272
+memory nodes + 1542 QA queries), we score whether the gold answer string is
+*in the retrieved top-k context* (retrieval grounding — the input to an LLM
+answerer, **not** end-to-end QA accuracy). Two ingestion strategies:
+
+- **whole** — each `session_summary` indexed as one node.
+- **chunk** — each summary split into sentences, indexed as many small nodes.
 
 ```text
-LOCOMO RETRIEVAL GROUNDING  (mini-fixture: 8 nodes, 13 questions)
-  embedder   recall@1  recall@3  recall@5   MRR
-  hashed     →  0.538    0.692     0.692   0.603
-  real(bge)  →  0.462    0.692     0.692   0.538
+LOCOMO RETRIEVAL GROUNDING  (full locomo10: 272 nodes, 1542 queries)
+  ingestion   embedder   recall@1  recall@3  recall@5   MRR
+  whole       hashed     →  0.043    0.093     0.139   0.064
+  whole       real(bge)  →  0.013    0.035     0.058   0.019
+  chunk       real(bge)  →  0.003    0.007     0.007   0.005
 ```
 
-**Honest finding:** on this tiny fixture the zero-dep *hashed* embedder matches
-or beats the dense `bge-small` one (MRR 0.603 vs 0.538). That's expected — the
-gold answers are sparse tokens (dates, names) a bag-of-words catches directly,
-and 8 nodes is far below where semantic density pays off. We report it as-is; on
-larger corpora dense vectors should pull ahead, and that's exactly what the full
-`--locomo` run is for. **The mesh's defensible win remains versioning (above),
-not raw recall.**
+**Honest findings (no spin):**
 
-> Reproduce: `PYTHONPATH=. python bench/locomo_eval.py`
-> Full set: `PYTHONPATH=. .venv/bin/python bench/locomo_eval.py --locomo locomo10.json`
+1. The **hashed** (zero-dep bag-of-words) embedder *beats* dense `bge-small`
+   on this grounding proxy (0.139 vs 0.058 recall@5). That's expected — the
+   metric is a lexical substring check, so a lexical embedder has an unfair
+   advantage on sparse gold answers (dates, names). It is **not** evidence
+   that hashed > semantic in general; it's evidence this metric is lexical.
+2. **Chunking collapses recall@5 to 0.007** because the gold answer string is
+   fragmented across sentence nodes, so a single-node substring match fails.
+   Whole-document retrieval artificially inflates the same metric. This is a
+   measurement artifact, not a quality regression.
+3. **Conclusion:** this grounding proxy is dominated by lexical overlap and is
+   the wrong yardstick for dense retrieval. The mesh's *defensible* win remains
+   **versioning / no-stale-truth** (100% current top-1 vs 16.7% flat, zero
+   stale leakage). Honest next step: score LoCoMo end-to-end by feeding
+   retrieved context to an LLM judge — that's where dense vectors should pull
+   ahead, and it's on the roadmap.
+
+> Reproduce (whole, hashed, fast):
+> `PYTHONPATH=. python bench/locomo_eval.py --locomo locomo10.json`
+> Reproduce (whole, real, batched):
+> `PYTHONPATH=. .venv/bin/python bench/locomo_eval.py --locomo locomo10.json --embedder real --no-autolink`
+> Reproduce (chunk, real): add `--chunk` (warning: ~500s on CPU)
+
+> **Note (2026-07):** `--embedder real` requires `fastembed` (`pip install
+> fastembed` in a venv). With no real embedder installed the bench silently
+> falls back to `hashed` — check the printed `embedder=` line so you know
+> which numbers you're looking at.
 
 ### `.mesh` — portable interchange ✅
 
@@ -261,6 +286,30 @@ formats parse and validate.
 
 > Reproduce: `PYTHONPATH=. python bench/distill_bench.py`
 
+### Helixa / Agent Aura provenance (off-chain scaffold) ✅
+
+D0xedDev's agent identity is anchored on **Helixa** (agentId 59322) on Base
+L2; its **Aura** is on-chain reputation. A `.mesh` file shared between agents
+should carry *who vouched* and *how trustworthy that voucher is*. That's what
+`neural_mesh/integrations/helixa_provenance.py` does — as a **metadata layer
+only**:
+
+* `HelixaStamp` — `{ agent_id, aura_score, vouched_at, source, signature,
+  tx_hash, verified }`, stored on `node.meta` so it survives `.mesh` export.
+* `stamp_node()` / `export_manifest()` — attach stamps and produce a
+  **human-reviewable manifest** before any on-chain step.
+* `aura_trust_weight()` — unverified stamps are capped at 0.2 so an unverified
+  voucher can't dominate trusted local memory.
+
+**Safety contract (read this):** this module **never** signs a transaction,
+**never** broadcasts to a chain, **never** calls a Helixa write endpoint, and
+**never** stores a private key. All "on-chain" effects are gated behind an
+externally-supplied signature / verification result (e.g. the D0xedDev
+`/helixa-signer` flow). Signing stays a separate, key-held, human-approved
+step.
+
+> Reproduce: `PYTHONPATH=. python -m unittest tests.test_core` (3 Helixa tests)
+
 ---
 
 ## Roadmap
@@ -272,10 +321,13 @@ formats parse and validate.
 - [x] Versioning / `supersedes` (no stale truth)
 - [x] `.mesh` portable interchange format
 - [x] Cross-agent mesh sharing + consensus
-- [x] Real LoCoMo eval harness (mini-fixture live; `--locomo` full-set ready)
+- [x] Real LoCoMo eval harness (full locomo10: 272 nodes / 1542 queries)
 - [x] LoRA-ready sleep distillation (consolidated-memory finetune data)
+- [x] Bulk ingest `add_many` (batched embedding for big corpora)
+- [x] Helixa / Agent Aura provenance scaffold (off-chain, review-gated)
+- [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)
 - [ ] Rust hot path for large meshes
-- [ ] Helixa / Agent Aura provenance (Base L2, optional)
+- [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer
 
 ---
 
@@ -290,7 +342,8 @@ formats parse and validate.
 | `neural_mesh/resonance.py` | Spreading-activation retrieval |
 | `neural_mesh/pointer.py` | Big-output → `mesh://` pointer protocol |
 | `neural_mesh/demo.py` | End-to-end live demo |
-| `bench/` | Reproducible benchmarks (versioning, recall) |
+| `neural_mesh/integrations/helixa_provenance.py` | Helixa/Aura provenance (off-chain, review-gated) |
+| `bench/` | Reproducible benchmarks (versioning, locomo, sharing, distill, tests) |
 
 ---
 

@@ -19,8 +19,14 @@ from .core import Mesh, MemoryType
 from .meshfile import export_mesh, import_mesh
 from .sharing import merge_peer_mesh, consensus_rank, PeerPolicy, export_for_peer
 from .lora_dataset import write_jsonl, write_hf_jsonl, write_weights, summarize
+from .integrations.helixa_provenance import (
+    HelixaStamp, stamp_node, verify_stamp, aura_trust_weight,
+    export_manifest, make_stamp,
+)
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
-           "write_jsonl", "write_hf_jsonl", "write_weights", "summarize"]
-__version__ = "0.3.0"
+           "write_jsonl", "write_hf_jsonl", "write_weights", "summarize",
+           "HelixaStamp", "stamp_node", "verify_stamp", "aura_trust_weight",
+           "export_manifest", "make_stamp"]
+__version__ = "0.5.0"

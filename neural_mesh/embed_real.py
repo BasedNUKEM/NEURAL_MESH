@@ -35,3 +35,14 @@ class RealEmbedder:
         else:
             vec = inst.encode(text)
         return tuple(float(x) for x in vec)
+
+    def embed_many(self, texts: list[str]):
+        """Batched embedding — orders of magnitude faster than per-call.
+
+        Returns a list of tuples aligned to `texts`."""
+        inst = self._load()
+        if self.backend == "fastembed":
+            vecs = list(inst.embed(texts))
+        else:
+            vecs = inst.encode(texts)
+        return [tuple(float(x) for x in v) for v in vecs]

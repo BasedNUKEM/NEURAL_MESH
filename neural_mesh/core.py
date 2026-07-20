@@ -68,6 +68,9 @@ class Mesh:
                           lane=lane, provenance=provenance,
                           agent_id=agent_id, trust=trust,
                           conflict_group=conflict_group)
+        # Seed resonance from trust so fresh high-trust facts are immediately
+        # retrievable/distillable even before a sleep() replay pass refreshes it.
+        node.resonance = trust
         if prospective_at:
             node.links["__prospective_at__"] = prospective_at
         self._save(node)
@@ -75,6 +78,29 @@ class Mesh:
             self._supersede(supersedes, node)
         self._auto_link(node)
         return node
+
+    def add_many(self, contents: list[str], type: str = MemoryType.SEMANTIC,
+                 lane: str = "default", provenance: str = "", trust: float = 0.5,
+                 autolink: bool = True) -> list[MemoryNode]:
+        """Bulk ingest. Embeds in batches (fast path for big corpora like
+        LoCoMo) and links only if `autolink` is set. Returns saved nodes."""
+        assert contents, "nothing to add"
+        if hasattr(self.embedder, "embed_many"):
+            embs = self.embedder.embed_many(list(contents))
+        else:
+            embs = [self.embedder(c) for c in contents]
+        nodes = []
+        for c, emb in zip(contents, embs):
+            n = MemoryNode(id="", type=type, content=c, embedding=emb,
+                           lane=lane, provenance=provenance, trust=trust,
+                           resonance=trust, created_at=time.time(),
+                           superseded_by="", conflict_group="")
+            self._save(n)
+            nodes.append(n)
+        if autolink:
+            for n in nodes:
+                self._auto_link(n)
+        return nodes
 
     def _supersede(self, old_id: str, new_node: MemoryNode):
         """Versioning: old fact is soft-archived, linked to its current successor.

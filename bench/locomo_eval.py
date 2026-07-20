@@ -50,10 +50,24 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9 ]", " ", s.lower()).strip()
 
 
-def build_mesh(nodes_text: list[str], embedder=None) -> Mesh:
+def build_mesh(nodes_text: list[str], embedder=None, chunk: bool = False,
+               autolink: bool = True) -> Mesh:
     mesh = Mesh(db_path=":memory:", embedder=embedder or _hashed())
-    for t in nodes_text:
-        mesh.add(t, type=MemoryType.EPISODIC, provenance="locomo")
+    mesh.link_threshold = 1.01 if not autolink else mesh.link_threshold
+    if chunk:
+        pieces = []
+        for t in nodes_text:
+            pieces += [s.strip() for s in re.split(r"(?<=[.!?])\s+", t)
+                       if len(s.strip()) > 3]
+    else:
+        pieces = nodes_text
+    # batched ingest: RealEmbedder.embed_many vs per-call add()
+    if hasattr(embedder or _hashed(), "embed_many"):
+        mesh.add_many(pieces, type=MemoryType.EPISODIC, provenance="locomo",
+                      autolink=autolink)
+    else:
+        for p in pieces:
+            mesh.add(p, type=MemoryType.EPISODIC, provenance="locomo")
     return mesh
 
 
@@ -116,18 +130,37 @@ def load_mini_fixture() -> tuple[list[str], list[tuple[str, str]]]:
 
 
 def load_full_locomo(path: str) -> tuple[list[str], list[tuple[str, str]]]:
+    """Map the real snap-research/locomo10.json schema into mesh nodes + Q/A.
+
+    The real file has, per conversation: `session_summary` (dict of
+    session_N_summary -> text), `event_summary` (per-session event lists),
+    `observation`, `conversation`, and `qa`. We treat each session summary as a
+    memory node (these are the curated, de-noised per-session facts the paper
+    itself uses as retrieval targets) and every `qa` entry as a query with its
+    gold `answer`."""
     with open(path) as fh:
         data = json.load(fh)
     nodes, queries = [], []
     for conv in data:
-        sessions = conv.get("sessions", {})
-        for s in sessions.values():
-            if isinstance(s, dict) and "summary" in s:
-                nodes.append(s["summary"])
-            elif isinstance(s, str):
+        # session summaries -> nodes
+        for s in (conv.get("session_summary") or {}).values():
+            if isinstance(s, str):
                 nodes.append(s)
+            elif isinstance(s, list):  # some entries are lists of sentences
+                nodes.append(" ".join(str(x) for x in s))
+        # event summaries also carry facts worth recalling
+        for ev in (conv.get("event_summary") or {}).values():
+            if isinstance(ev, list):
+                nodes.append(" ".join(str(x) for x in ev))
+            elif isinstance(ev, str):
+                nodes.append(ev)
         for qa in conv.get("qa", []):
-            queries.append((qa["question"], str(qa["answer"])))
+            ans = qa.get("answer")
+            if ans is None:
+                # adversarial/negative qa have no positive answer; skip as a
+                # retrieval target (we only score whether gold answers appear)
+                continue
+            queries.append((qa["question"], str(ans)))
     return nodes, queries
 
 
@@ -136,6 +169,10 @@ def main():
     ap.add_argument("--locomo", help="path to full locomo10.json")
     ap.add_argument("--embedder", choices=["hashed", "real"], default="hashed")
     ap.add_argument("--top_k", type=int, default=5)
+    ap.add_argument("--chunk", action="store_true",
+                    help="split session summaries into sentences before indexing")
+    ap.add_argument("--no-autolink", action="store_true",
+                    help="skip O(n^2) auto-linking for bulk retrieval benchmarks")
     args = ap.parse_args()
 
     embedder = _real() if args.embedder == "real" else _hashed()
@@ -147,7 +184,8 @@ def main():
         nodes, queries = load_mini_fixture()
     print(f"    nodes={len(nodes)} queries={len(queries)} embedder={args.embedder}")
 
-    mesh = build_mesh(nodes, embedder=embedder)
+    mesh = build_mesh(nodes, embedder=embedder, chunk=args.chunk,
+                      autolink=not args.no_autolink)
     res = evaluate(mesh, queries, top_k=args.top_k)
 
     print("\nLOCOMO RETRIEVAL GROUNDING")
