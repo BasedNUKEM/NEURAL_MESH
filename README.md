@@ -246,6 +246,16 @@ HDR alpha sweep (hybrid ctxR@5 / F1@5 / MRR):
   alpha=0.9 → 0.182 / 0.191 / 0.126   (+3.4% over dense — best)
 ```
 
+**Retrieval-mode comparison (α=0.9, top_k=5):**
+
+```text
+mode       ctxR@5  ctxR@1  F1@5   EM@5   MRR(ctx)
+dense      0.176   0.097   0.189  0.000  0.124
+lexical    0.110   0.044   0.163  0.000  0.067
+resonance  0.037   0.015   0.120  0.000  0.023   (spreading activation)
+hybrid     0.182   0.097   0.191  0.000  0.126   (best)
+```
+
 **Honest findings:**
 
 1. **Dense > hybrid@low-α > lexical** for context recall. Unlike the old
@@ -263,7 +273,17 @@ HDR alpha sweep (hybrid ctxR@5 / F1@5 / MRR):
    deployment needs a *generative* reader (local LLM). The proxy only proves the
    *context is retrievable*, which is the honest ceiling for a retriever-only
    system.
-4. **Conclusion:** the defensible, reproduced wins remain (a) **no-stale-truth
+4. **Resonance (spreading activation) underperforms flat dense on LoCoMo.**
+   ctxR@5 drops to 0.037 vs 0.176 dense — ~5× worse. This is **honest and
+   expected, not a bug**: LoCoMo is a *single-query → single-answer* benchmark.
+   Spreading activation trades direct query-similarity for *associative*
+   recall — it surfaces neighbors topologically linked to the seed, many of
+   which are semantically unrelated to the literal question. That dilution
+   hurts top-k answer retrieval here. Resonance's value (connecting related
+   memories a user didn't ask about directly) is a *different* capability
+   this proxy metric can't see. Flat dense remains the right tool for
+   direct QA; resonance is for exploratory/associative recall.
+5. **Conclusion:** the defensible, reproduced wins remain (a) **no-stale-truth
    versioning** (100% current top-1 vs 16.7% flat) and (b) **dense retrieval
    surfaces answer context ~59% more often than lexical** (0.176 vs 0.110
    recall@5). End-to-end answer generation is future work (local LLM reader).

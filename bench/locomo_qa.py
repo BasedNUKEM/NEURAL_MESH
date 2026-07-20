@@ -123,6 +123,8 @@ def evaluate_qa(mesh, queries, mode: str = "dense", top_k: int = 5,
             hits = mesh.dense_recall(q, top_k=max(ks))
         elif mode == "lexical":
             hits = mesh.lexical_recall(q, top_k=max(ks))
+        elif mode == "resonance":
+            hits = mesh.recall(q, top_k=max(ks))          # spreading activation
         else:  # hybrid
             hits = mesh.hybrid_recall(q, top_k=max(ks), alpha=alpha)
         # context recall + extractive F1/EM per k
@@ -158,9 +160,14 @@ def main():
     ap.add_argument("--top_k", type=int, default=5)
     ap.add_argument("--alpha", type=float, default=0.5,
                     help="hybrid lexical weight = (1-alpha); 0.5 = even mix")
+    ap.add_argument("--modes", default="dense,lexical,hybrid,resonance",
+                    help="comma-separated subset of "
+                         "dense,lexical,hybrid,resonance")
     ap.add_argument("--chunk", action="store_true")
     ap.add_argument("--no-autolink", action="store_true")
     args = ap.parse_args()
+
+    modes = [m.strip() for m in args.modes.split(",") if m.strip()]
 
     embedder = _real() if args.embedder == "real" else _hashed()
     print(f"==> loading FULL LoCoMo from {args.locomo}")
@@ -169,7 +176,6 @@ def main():
     mesh = build_mesh(nodes, embedder=embedder, chunk=args.chunk,
                       autolink=not args.no_autolink)
 
-    modes = ["dense", "lexical", "hybrid"]
     print(f"\nEND-TO-END LoCoMo QA (extractive reader proxy, top_k={args.top_k}, "
           f"alpha={args.alpha})")
     print("Lower bound on a real LLM reader; measures 'can the memory answer'.\n")
@@ -183,6 +189,7 @@ def main():
               f"F1@{args.top_k}={f1[args.top_k]:.3f}  "
               f"EM@{args.top_k}={em[args.top_k]:.3f}  MRR(ctx)={res['mrr_context']:.3f}")
     print("\nMODES: dense=cosine only | lexical=hashed only | "
+          "resonance=spreading activation (mesh differentiator) | "
           "hybrid=alpha*dense+(1-alpha)*lexical")
     print("F1/EM = extractive reader picks highest-F1 sentence vs gold; "
           "lower bound on a real LLM reader.")
