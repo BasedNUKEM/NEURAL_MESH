@@ -85,13 +85,22 @@ class Mesh:
     def add(self, content: str, type: MemoryType = MemoryType.SEMANTIC,
             lane: str = "hot", provenance: str = "", prospective_at: float = 0.0,
             supersedes: str = "", agent_id: str = "", trust: float = 1.0,
-            conflict_group: str = "", **meta) -> MemoryNode:
+            by: str = "", conflict_group: str = "", meta: "dict | None" = None,
+            **extra_meta) -> MemoryNode:
         emb = self.embedder(content)
         self._invalidate_cache()
+        if not by:
+            by = agent_id or provenance or "self"
         node = MemoryNode(id="", type=type, content=content, embedding=emb,
                           lane=lane, provenance=provenance,
-                          agent_id=agent_id, trust=trust,
+                          agent_id=agent_id, trust=trust, by=by,
                           conflict_group=conflict_group)
+        if meta or extra_meta:
+            node.meta = dict(node.meta or {})
+            if meta:
+                node.meta.update(meta)
+            if extra_meta:
+                node.meta.update(extra_meta)
         # Seed resonance from trust so fresh high-trust facts are immediately
         # retrievable/distillable even before a sleep() replay pass refreshes it.
         node.resonance = trust

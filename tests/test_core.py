@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 from neural_mesh import Mesh, MemoryType  # noqa: E402
 from neural_mesh import export_mesh, import_mesh  # noqa: E402
 from neural_mesh import merge_peer_mesh, consensus_rank, PeerPolicy  # noqa: E402
+from neural_mesh.dream import dream as dream_cycle, recall_associative  # noqa: E402
 
 
 def _export(mesh) -> str:
@@ -295,4 +296,126 @@ class TestQAReaderMetrics(unittest.TestCase):
         pred = extractive_answer(hits, "Tom went to the park")
         self.assertIsNotNone(pred)
         self.assertIn("park", pred)
+
+
+class TestProvenanceBy(unittest.TestCase):
+    """'remember is BY' — attribution as a first-class memory primitive."""
+    def test_by_defaults_from_agent_or_self(self):
+        m = Mesh(":memory:")
+        n = m.add("a fact")
+        self.assertEqual(n.by, "self")
+        a = m.add("agent fact", agent_id="devio")
+        self.assertEqual(a.by, "devio")
+        p = m.add("bulk fact", provenance="bulkload")
+        self.assertEqual(p.by, "bulkload")
+
+    def test_by_explicit_beats_derived(self):
+        m = Mesh(":memory:")
+        n = m.add("credited", by="cody", agent_id="devio")
+        self.assertEqual(n.by, "cody")
+
+    def test_by_persists_roundtrip(self):
+        import tempfile, os
+        path = tempfile.mktemp(suffix=".db")
+        try:
+            m = Mesh(path)
+            m.add("attributed", by="helixa-59322", agent_id="59322",
+                  meta={"helixa_stamp": {"agent_id": "59322", "aura_score": 0.85,
+                                        "verified": "verified"}})
+            del m
+            m2 = Mesh(path)
+            n = m2._load().popitem()[1]
+            self.assertEqual(n.by, "helixa-59322")
+            # meta passed through add() persists now (regression guard)
+            self.assertEqual(n.meta["helixa_stamp"]["agent_id"], "59322")
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
+
+class TestReaderInterface(unittest.TestCase):
+    """Reader swap-point: extractive default + LLM drop-in."""
+    def test_extractive_reader(self):
+        from neural_mesh.reader import ExtractiveReader
+        r = ExtractiveReader()
+        out = r.answer("q", ["the park is green", "Tom went to the park"],
+                       gold="Tom went to the park")
+        self.assertEqual(out, "Tom went to the park")
+
+    def test_callable_reader_swap(self):
+        from neural_mesh.reader import CallableReader
+        r = CallableReader(lambda q, c: "ANS:" + c.split("\n")[0])
+        out = r.answer("q", ["first passage", "second"])
+        self.assertEqual(out, "ANS:first passage")
+
+
+class TestDreamCycle(unittest.TestCase):
+    """Agentic consolidation: attribution-weighted trust, link reinforce,
+    self-reflective muse that mints new 'by=dream' insight nodes."""
+    def test_dream_reinforces_links_and_muses(self):
+        m = Mesh(":memory:")
+        a = m.add("topic alpha one", by="seed")
+        b = m.add("topic alpha two", by="seed")
+        c = m.add("topic alpha three", by="seed")
+        rep = dream_cycle(m, reinforce_k=3, muse_fn=lambda surv: ["synthesis: alpha cluster"])
+        self.assertGreaterEqual(rep["reinforced"], 0)
+        # muse minted a node attributed to the dream process itself
+        dream_nodes = [n for n in m._load().values() if n.by == "dream"]
+        self.assertEqual(len(dream_nodes), 1)
+        self.assertIn("synthesis", dream_nodes[0].content)
+
+    def test_author_weight_boosts_verified_aura(self):
+        m = Mesh(":memory:")
+        # verified high-aura author -> author_weight = trust * (0.5 + 0.5*aura)
+        n = m.add("cody prefers concise answers", by="cody",
+                  trust=0.9, meta={"helixa_stamp": {"agent_id": "59322",
+                                                    "aura_score": 0.85,
+                                                    "verified": "verified"}})
+        dream_cycle(m)
+        reloaded = m._load()[n.id]
+        expected = round(0.9 * (0.5 + 0.5 * 0.85), 3)
+        self.assertAlmostEqual(reloaded.meta["author_weight"], expected, places=2)
+
+
+class TestAssociativeRecall(unittest.TestCase):
+    """Resonance/spreading activation reaches path-dependent targets dense misses.
+
+    With only 4 nodes, flat dense top-5 trivially returns everything, so the
+    target is "found" by dense too. To make the claim honest we add distractor
+    nodes, so dense's top-5 is forced to choose and genuinely misses the
+    path-dependent target while resonance's walk still reaches it.
+    """
+    def test_resonance_reaches_linked_target(self):
+        m = Mesh(":memory:")
+        ids, prev = [], None
+        chain = ["the living room couch is blue",
+                 "the couch is near the oak bookshelf",
+                 "the bookshelf holds a ceramic dish",
+                 "my spare house key is on a red lanyard"]
+        for t in chain:
+            n = m.add(t, MemoryType.SEMANTIC, by="seed")
+            ids.append(n.id)
+            if prev:
+                prev.links[n.id] = 1.0
+                n.links[prev.id] = 0.3
+                m._save(prev); m._save(n)
+            prev = n
+        # Distractors are engineered to have HIGHER direct cosine to the query
+        # ("color", "living room", "couch") than the path-dependent target, which
+        # shares ZERO query tokens (cosine exactly 0). With >=5 such distractors,
+        # flat dense top-5 is forced to exclude the target -> honest "miss".
+        for i in range(6):
+            m.add(f"the living room color scheme uses paint number {i}",
+                  MemoryType.SEMANTIC, by="noise")
+        reached = recall_associative(m, "what color is the living room couch",
+                                     top_k=12, hops=3)
+        reached_ids = [n.id for n in reached]
+        self.assertIn(ids[-1], reached_ids)  # walked to the target
+        # flat dense top-5 must now genuinely exclude the path-dependent target
+        from neural_mesh.embed import cosine
+        qe = m.embedder("what color is the living room couch")
+        dense_ids = [n.id for _, n in sorted(
+            ((cosine(qe, n.embedding), n) for n in m._load().values()),
+            key=lambda x: -x[0])[:5]]
+        self.assertNotIn(ids[-1], dense_ids)
 

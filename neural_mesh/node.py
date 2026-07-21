@@ -29,6 +29,7 @@ class MemoryNode:
     resonance: float = 0.0
     trust: float = 1.0
     provenance: str = ""
+    by: str = ""                    # attribution: WHO authored/recalled this
     lane: str = "hot"            # "hot" (short-term) or "cold" (long-term)
     version: int = 1
     superseded_by: str = ""
@@ -42,6 +43,10 @@ class MemoryNode:
             self.last_accessed = self.created_at
         if not self.id:
             self.id = uuid.uuid4().hex[:12]
+        # "by" is the human-readable attribution primitive: *remembering is BY
+        # someone/thing*. Default it from structured identity if absent.
+        if not self.by:
+            self.by = self.agent_id or self.provenance or "self"
 
     def touch(self):
         self.last_accessed = time.time()
@@ -61,6 +66,7 @@ class MemoryNode:
                 "resonance": self.resonance,
                 "trust": self.trust,
                 "provenance": self.provenance,
+                "by": self.by,
                 "lane": self.lane,
                 "version": self.version,
                 "superseded_by": self.superseded_by,
@@ -86,6 +92,7 @@ class MemoryNode:
         n.resonance = meta.get("resonance", 0.0)
         n.trust = meta.get("trust", 1.0)
         n.provenance = meta.get("provenance", "")
+        n.by = meta.get("by", "")
         n.lane = meta.get("lane", "hot")
         n.version = meta.get("version", 1)
         n.superseded_by = meta.get("superseded_by", "")

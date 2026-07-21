@@ -291,6 +291,87 @@ hybrid     0.182   0.097   0.191  0.000  0.126   (best)
 > Reproduce: `PYTHONPATH=. .venv/bin/python bench/locomo_qa.py --locomo locomo10.json --embedder real --top_k 5 --alpha 0.9`
 > (alpha sweep: try 0.3/0.5/0.7/0.9; α≈0.9 maximizes hybrid on this set)
 
+### Associative recall — where resonance *wins* ✅ (and where it doesn't)
+
+LoCoMo is a *single-query → single-answer* task, so flat dense wins there
+(resonance ctxR@5 0.037 vs hybrid 0.182). But resonance/spreading activation has
+a real niche flat dense **cannot** touch: **path-dependent recall** — the answer
+is reachable only by walking a chain of links, with no lexical/semantic bridge
+from the query.
+
+`bench/associative_qa.py` builds meshes where the target shares *zero* tokens with
+the query and is connected only through a 3-hop link chain. We add enough
+higher-overlap distractors that flat dense's top-5 is *forced* to exclude the
+target, then show the associative walk still reaches it.
+
+```text
+ASSOCIATIVE RECALL  (hashed embedder, deterministic, 3 cases)
+  Q: what color is the living room couch
+    dense     : miss  (target shares 0 query tokens; ranked out of top-5)
+    resonance : reached walk-rank=7   -> SURFACED a target dense MISSED
+  Q: tell me about the researcher Mira
+    dense     : miss  (answer is only link-reachable)
+    resonance : reached walk-rank=4   -> SURFACED a target dense MISSED
+  Q: what is the deploy region
+    dense     : HIT  rank=1            (control: dense legitimately wins)
+    resonance : reached walk-rank=1    (and resonance also finds it)
+  path-dependent resonance-only reaches: 2 / 2
+```
+
+**Honest framing:** the 2 "resonance wins" cases are *engineered* to isolate the
+capability (target reachable only via links). The 3rd case is a **control** where
+dense legitimately wins and is included precisely to avoid overclaiming. Real
+corpora are mixed; the point is that resonance provides a retrieval mode flat
+dense structurally cannot, and the benchmark proves it on a measurable,
+reproducible case rather than asserting it as philosophy.
+
+> Reproduce: `PYTHONPATH=. python3 bench/associative_qa.py`
+
+### Provenance by-design: the `by` field + DREAM cycle
+
+Two additions make memory *attributable* and *self-consolidating*:
+
+- **`by` (Feature A)** — every `MemoryNode` carries a first-class `by` author
+  field. `Mesh.add(..., by=...)` defaults it from `agent_id` → `provenance` →
+  `"self"`. It persists in the SQLite row and round-trips through `.mesh` export.
+  This is the literal "remember is *by*" — you always know *who/what* authored a
+  memory, not just when.
+- **DREAM (Feature C)** — an explicit, inspectable consolidation cycle
+  (`neural_mesh/dream.py`) with 5 phases:
+  - **D**rift — age-based resonance decay
+  - **R**einforce — Hebbian link-strengthening for co-retrieved neighbors
+  - **E**valuate — attribution-weighted trust: a Helixa-verified high-aura author
+    gets `author_weight = trust * (0.5 + 0.5 * aura)`; an unverified claim is
+    discounted (`* 0.6`); folded into `node.meta["author_weight"]`
+  - **A**rchive — prune low-resonance/low-trust/old nodes
+  - **M**use — reflect surviving clusters into new insight nodes minted
+    `by="dream"`, which then participate in later retrieval (the mesh grows
+    memories about its own memories)
+- **Reader swap-point (Feature D)** — `neural_mesh/reader.py` defines a `Reader`
+  interface. `ExtractedReader` is the model-free extractive proxy (default, used
+  by `bench/locomo_qa.py`). `CallableReader(fn)` is the drop-in for a real local
+  LLM: pass `fn(query, context) -> answer` and generated answers become real with
+  **zero** changes to the retrieval/benchmark code.
+
+```python
+from neural_mesh import Mesh, dream
+from neural_mesh.reader import CallableReader
+
+m = Mesh()
+# ... add memories ...
+rep = dream(m, muse_fn=lambda survivors: [f"synthesis: {s.content[:40]}" for s in survivors[:1]])
+# rep -> {"drifted", "reinforced", "archived", "author_boosted", "insights"}
+
+# real generated answers once you have a local model:
+reader = CallableReader(lambda q, ctx: my_local_llm(q, ctx))
+print(reader.answer("who is Cody?", [n.content for n in m.recall("Cody")]))
+```
+
+> Reproduce DREAM + associative: `PYTHONPATH=. python3 bench/associative_qa.py`
+> Tests: `PYTHONPATH=. python3 -m unittest tests.test_core` (33 passing, incl.
+> `TestProvenanceBy`, `TestReaderInterface`, `TestDreamCycle`,
+> `TestAssociativeRecall`)
+
 ### `.mesh` — portable interchange ✅
 
 Export/import the whole graph (nodes + typed links + version history) to a single

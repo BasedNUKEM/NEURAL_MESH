@@ -19,6 +19,8 @@ from .core import Mesh, MemoryType
 from .meshfile import export_mesh, import_mesh
 from .sharing import merge_peer_mesh, consensus_rank, PeerPolicy, export_for_peer
 from .lora_dataset import write_jsonl, write_hf_jsonl, write_weights, summarize
+from .dream import dream, recall_associative
+from .reader import Reader, ExtractiveReader, CallableReader
 from .integrations.helixa_provenance import (
     HelixaStamp, stamp_node, verify_stamp, aura_trust_weight,
     export_manifest, make_stamp,
@@ -27,6 +29,8 @@ from .integrations.helixa_provenance import (
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
            "write_jsonl", "write_hf_jsonl", "write_weights", "summarize",
+           "dream", "recall_associative", "Reader", "ExtractiveReader",
+           "CallableReader",
            "HelixaStamp", "stamp_node", "verify_stamp", "aura_trust_weight",
            "export_manifest", "make_stamp"]
-__version__ = "0.6.0"
+__version__ = "0.7.0"
