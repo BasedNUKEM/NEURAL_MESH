@@ -35,7 +35,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.7.0",
+        "version": "0.8.0",
     })
 
 # ─── CRUD ──────────────────────────────────────────────────────────────────
@@ -85,8 +85,26 @@ def recall():
 
 @app.route("/mesh/dream", methods=["POST"])
 def dream():
-    """Run DREAM consolidation cycle. Returns actionable report."""
-    report = mesh.sleep()
+    """Run DREAM consolidation cycle. Body: {muse?: "template"|"llm"|false, options?}.
+
+    Returns actionable report with insights, archived, reinforced counts.
+    muse="template" (default) generates rule-based insights from surviving clusters.
+    muse="llm" calls an LLM (requires OPENROUTER_API_KEY).
+    muse=false skips insight generation.
+    """
+    data = request.get_json() or {}
+    muse_mode = data.get("muse", "template")
+
+    muse_fn = None
+    if muse_mode == "template":
+        from neural_mesh.muse import template_muse
+        muse_fn = template_muse
+    elif muse_mode == "llm":
+        from neural_mesh.muse import llm_muse
+        muse_fn = llm_muse
+
+    from neural_mesh.dream import dream as run_dream
+    report = run_dream(mesh, muse_fn=muse_fn)
     return jsonify(report)
 
 # ─── Sharing ───────────────────────────────────────────────────────────────
@@ -190,7 +208,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.7.0",
+        "version": "0.8.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
