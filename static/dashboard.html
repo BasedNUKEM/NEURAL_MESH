@@ -93,7 +93,7 @@ async function load() {
         <div class="node">
           <div class="meta">
             <div class="prov">${n.provenance||'unknown'}</div>
-            <div class="by">by ${n.by||'?'}</div>
+            <div class="by">by ${n.by||'?'}${n.helixa ? ' 🟦#'+n.helixa : ''}</div>
           </div>
           <div class="content">${n.content}</div>
           <div class="trust">${n.trust.toFixed(2)}</div>
