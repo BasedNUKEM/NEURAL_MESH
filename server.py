@@ -140,14 +140,15 @@ def merge():
 def stamp():
     """Add Helixa provenance stamp. Body: {node_id, agent_id, aura_score?, verified_handle?}"""
     data = request.get_json()
-    from neural_mesh.integrations.helixa_provenance import stamp_node
-    stamped = stamp_node(
-        mesh=mesh,
-        node_id=data["node_id"],
-        agent_id=data["agent_id"],
-        aura_score=data.get("aura_score"),
-        verified_handle=data.get("verified_handle"),
+    from neural_mesh.integrations.helixa_provenance import stamp_node, HelixaStamp
+    stamp_obj = HelixaStamp(
+        agent_id=str(data["agent_id"]),
+        aura_score=float(data.get("aura_score", 0.0)),
+        source="mcp-server",
+        vouched_at=__import__("time").time(),
+        verified="verified" if data.get("verified_handle") else "unverified",
     )
+    stamped = stamp_node(mesh=mesh, node_id=data["node_id"], stamp=stamp_obj)
     return jsonify({"stamped": stamped, "node_id": data["node_id"]})
 
 # ─── Public Community Mesh ──────────────────────────────────────────────────
