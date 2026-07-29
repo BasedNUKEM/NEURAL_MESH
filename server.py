@@ -13,7 +13,7 @@ Health check: curl http://localhost:4021/health
 import sys, os, sqlite3
 sys.path.insert(0, os.path.dirname(__file__))
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from neural_mesh.core import Mesh, MemoryType
 
 app = Flask(__name__)
@@ -37,6 +37,13 @@ def health():
         "nodes": count,
         "version": "0.8.0",
     })
+
+# ─── Dashboard ─────────────────────────────────────────────────────────────
+
+@app.route("/dashboard", methods=["GET"])
+def dashboard():
+    """Serve the public mesh dashboard."""
+    return send_from_directory("static", "dashboard.html")
 
 # ─── CRUD ──────────────────────────────────────────────────────────────────
 

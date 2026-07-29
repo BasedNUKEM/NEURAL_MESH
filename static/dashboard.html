@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEURAL_MESH Dashboard — D0xedDev</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; color: #e0e0e0; font-family: system-ui, sans-serif; padding: 2rem; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+.header h1 { font-size: 1.8rem; background: linear-gradient(135deg, #00d4ff, #7b61ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.badge { background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.85rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.card { background: #12121f; border: 1px solid #1e1e3a; border-radius: 12px; padding: 1.2rem; }
+.card .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.card .value { font-size: 1.8rem; font-weight: 700; color: #00d4ff; }
+.prov-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
+.prov-bar div { height: 100%; }
+.nodes { background: #12121f; border: 1px solid #1e1e3a; border-radius: 12px; overflow: hidden; }
+.nodes h2 { padding: 1rem 1.2rem; border-bottom: 1px solid #1e1e3a; font-size: 1rem; color: #ccc; }
+.node { display: flex; gap: 1rem; padding: 0.8rem 1.2rem; border-bottom: 1px solid #1a1a2a; align-items: flex-start; }
+.node:last-child { border-bottom: none; }
+.node .meta { min-width: 100px; }
+.node .meta .prov { font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; background: #1a1a3e; color: #7b61ff; display: inline-block; margin-bottom: 4px; }
+.node .meta .by { font-size: 0.7rem; color: #666; }
+.node .content { flex: 1; font-size: 0.9rem; line-height: 1.5; color: #ccc; }
+.node .trust { font-size: 0.75rem; color: #00d4ff; white-space: nowrap; }
+.loading { text-align: center; padding: 2rem; color: #666; }
+.error { text-align: center; padding: 2rem; color: #ff4444; }
+.prov-colors { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.prov-dot { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; }
+.prov-dot span { width: 10px; height: 10px; border-radius: 2px; }
+.refresh { color: #7b61ff; cursor: pointer; font-size: 0.8rem; }
+.refresh:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>🧠 NEURAL_MESH</h1>
+    <div style="color:#888;font-size:0.8rem;margin-top:4px">D0xedDev Agent Memory — <span class="refresh" onclick="load()">refresh</span></div>
+  </div>
+  <div id="version" class="badge">v—</div>
+</div>
+
+<div class="grid" id="stats"></div>
+
+<div id="provBreakdown" style="margin-bottom:1rem"></div>
+
+<div class="nodes">
+  <h2>📡 Public Feed</h2>
+  <div id="feed"> <div class="loading">Loading…</div> </div>
+</div>
+
+<script>
+const API = '/mesh';
+const COLORS = ['#00d4ff','#7b61ff','#ff6b6b','#51cf66','#ffd43b','#ff922b','#20c997','#f06595','#845ef7','#339af0'];
+
+async function load() {
+  try {
+    const [stats, pub] = await Promise.all([
+      fetch(API+'/stats').then(r=>r.json()),
+      fetch(API+'/public?limit=20').then(r=>r.json())
+    ]);
+
+    document.getElementById('version').textContent = 'v' + stats.version;
+
+    // Stats cards
+    document.getElementById('stats').innerHTML = `
+      <div class="card"><div class="label">Total Nodes</div><div class="value">${stats.total_nodes}</div></div>
+      <div class="card"><div class="label">Active</div><div class="value">${stats.active_nodes}</div></div>
+      <div class="card"><div class="label">Consolidated</div><div class="value">${stats.consolidated}</div></div>
+      <div class="card"><div class="label">Provenance Sources</div><div class="value">${stats.provenance_breakdown.length}</div></div>
+    `;
+
+    // Provenance bars
+    const maxCount = Math.max(...stats.provenance_breakdown.map(p=>p.count));
+    let bars = stats.provenance_breakdown.map((p,i) => 
+      `<div style="background:${COLORS[i%COLORS.length]};width:${(p.count/maxCount*100)}%"></div>`
+    ).join('');
+    document.getElementById('provBreakdown').innerHTML = `
+      <div class="prov-bar">${bars}</div>
+      <div class="prov-colors">
+        ${stats.provenance_breakdown.map((p,i) => 
+          `<div class="prov-dot"><span style="background:${COLORS[i%COLORS.length]}"></span>${p.source||'unknown'} (${p.count})</div>`
+        ).join('')}
+      </div>
+    `;
+
+    // Feed
+    if (pub.results && pub.results.length) {
+      document.getElementById('feed').innerHTML = pub.results.map(n => `
+        <div class="node">
+          <div class="meta">
+            <div class="prov">${n.provenance||'unknown'}</div>
+            <div class="by">by ${n.by||'?'}</div>
+          </div>
+          <div class="content">${n.content}</div>
+          <div class="trust">${n.trust.toFixed(2)}</div>
+        </div>
+      `).join('');
+    } else {
+      document.getElementById('feed').innerHTML = '<div class="loading">No public nodes yet. Seed the mesh!</div>';
+    }
+  } catch(e) {
+    document.getElementById('feed').innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  }
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
