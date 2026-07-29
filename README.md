@@ -464,6 +464,43 @@ step.
 
 > Reproduce: `PYTHONPATH=. python -m unittest tests.test_core` (3 Helixa tests)
 
+### v0.8.0 — DREAM muse engine + REST server (2026-07-29)
+
+The DREAM cycle now generates real insights via a **pluggable muse engine**.
+Two muse backends ship in-box:
+
+- **`template_muse`** (default) — zero-dep rule-based engine: clusters survivors
+  by provenance, extracts top terms, synthesizes per-cluster summaries + a
+  cross-cluster bridge node + a resonance leaderboard. Proven on the live
+  D0xedDev mesh (30→40 nodes after 2 cycles, 11 `dream-muse` provenances).
+- **`llm_muse`** — calls an LLM (OpenRouter, OpenAI, or any OpenAI-compatible
+  endpoint) to synthesize insights from survivors. Falls back to template if
+  the API key is absent or the call fails.
+
+A **Flask REST server** (`server.py`) exposes the full mesh API on port 4021:
+
+```
+GET  /health              — node count + version
+POST /mesh/add            — {content, type?, source?, by?}
+POST /mesh/recall         — {query, top_k?, mode?: resonance|dense|lexical|hybrid}
+POST /mesh/dream          — {muse?: "template"|"llm"|false}
+POST /mesh/export         — {path?} → .mesh JSONL
+POST /mesh/merge          — {path, policy?} → cross-agent merge
+POST /mesh/stamp          — {node_id, agent_id, aura_score?, verified_handle?}
+GET  /mesh/public?q=&limit=N — searchable public feed
+GET  /mesh/stats           — node count + provenance breakdown
+POST /mesh/answer          — {query, context_chunks[]} → extractive reader
+```
+
+**Live deployment (D0xedDev VPS):**
+- 40 nodes, 11 `dream-muse` provenance entries
+- DREAM cron every 12h with template muse
+- Benchmarks re-verified: 33/33 tests green, versioning 100% vs 16.7% flat,
+  associative 2/2 path-dependent wins
+
+> Reproduce: `.venv-server/bin/python server.py` (port 4021), then
+> `curl -X POST http://localhost:4021/mesh/dream -H "Content-Type: application/json" -d '{"muse":"template"}'`
+
 ---
 
 ## Roadmap
