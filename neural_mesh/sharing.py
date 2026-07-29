@@ -119,7 +119,8 @@ def merge_peer_mesh(local_mesh, peer_file: str,
             matches[0] = loc
             fused += 1
         elif policy.allow_new:
-            pn.provenance = (pn.provenance + f"|peer:{pn.agent_id}").strip("|")
+            prov = pn.provenance or "unknown"
+            pn.provenance = (prov + f"|peer:{pn.agent_id}").strip("|")
             local_mesh._save(pn)
             local_by_hash.setdefault(chash, []).append(pn)
             added += 1
