@@ -107,11 +107,21 @@ def dream():
         from neural_mesh.muse import template_muse
         muse_fn = template_muse
     elif muse_mode == "llm":
-        from neural_mesh.muse import llm_muse
-        muse_fn = llm_muse
+        try:
+            from neural_mesh.muse import llm_muse
+            # Quick test to see if LLM is reachable
+            import os
+            if not os.environ.get("OPENROUTER_API_KEY"):
+                print("[WARN] LLM muse requested but OPENROUTER_API_KEY not set — falling back to template", flush=True)
+            else:
+                muse_fn = llm_muse
+        except Exception as e:
+            print(f"[WARN] LLM muse init failed: {e} — falling back to template", flush=True)
 
     from neural_mesh.dream import dream as run_dream
     report = run_dream(mesh, muse_fn=muse_fn)
+    if muse_mode == "llm" and muse_fn is None:
+        report["muse_fallback"] = "template (LLM unavailable)"
     return jsonify(report)
 
 # ─── Sharing ───────────────────────────────────────────────────────────────
@@ -235,4 +245,17 @@ def answer():
 # ─── Server ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # Source env vars for LLM muse (OpenRouter key)
+    env_file = os.path.expanduser("/opt/data/.env.d0xeddev_populated")
+    if os.path.exists(env_file):
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    if line.startswith("export "):
+                        line = line[7:]
+                    key, _, val = line.partition("=")
+                    val = val.strip().strip('"').strip("'")
+                    if key and val:
+                        os.environ[key] = val
     app.run(host="0.0.0.0", port=4021, debug=False)

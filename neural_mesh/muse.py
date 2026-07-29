@@ -110,7 +110,10 @@ def llm_muse(survivors: list, model: str = None, min_cluster: int = 3) -> list[s
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read())
-            text = body["choices"][0]["message"]["content"].strip()
+            content = body.get("choices", [{}])[0].get("message", {}).get("content")
+            if not content:
+                raise ValueError(f"Empty LLM response: {json.dumps(body)[:200]}")
+            text = content.strip()
             insights = [line.strip("- •") for line in text.split("\n") if line.strip()]
             if insights:
                 return insights
