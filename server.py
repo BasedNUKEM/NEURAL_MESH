@@ -242,6 +242,16 @@ def answer():
     answer = reader.answer(data["query"], data["context_chunks"])
     return jsonify({"answer": answer, "method": "extractive_proxy"})
 
+# ─── Intuition Bridge ────────────────────────────────────────────────────
+
+@app.route("/mesh/intuition/export", methods=["GET"])
+def intuition_export():
+    """Export NEURAL_MESH as Intuition Knowledge Graph Atoms + Triples."""
+    from intuition_bridge import build_intuition_graph
+    skills = request.args.get("skills", "")
+    skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
+    return jsonify(build_intuition_graph(skills_list))
+
 # ─── Server ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
