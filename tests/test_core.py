@@ -930,3 +930,91 @@ class TestLoCoMoQA(unittest.TestCase):
         self.assertEqual(metrics["total"], 0)
         self.assertEqual(metrics["mean"], 0.0)
 
+class TestHelixaSignerLive(unittest.TestCase):
+    """Live Helixa API signer — tests use a throwaway test key, NEVER the real one."""
+
+    TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"  # Hardhat #0
+
+    def setUp(self):
+        import tempfile, os
+        self._tmp_env = tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False)
+        self._tmp_env.write(f'export TRADING_WALLET_PRIVATE_KEY="{self.TEST_KEY[2:]}"\n')
+        self._tmp_env.close()
+
+        # Patch the ENV_FILE constant temporarily
+        import neural_mesh.integrations.helixa_signer as hs
+        self._orig_env = hs.ENV_FILE
+        hs.ENV_FILE = self._tmp_env.name
+
+    def tearDown(self):
+        import os
+        import neural_mesh.integrations.helixa_signer as hs
+        hs.ENV_FILE = self._orig_env
+        os.unlink(self._tmp_env.name)
+
+    def test_signer_loads_key_and_derives_address(self):
+        from neural_mesh.integrations.helixa_signer import HelixaSigner
+        signer = HelixaSigner()
+        self.assertTrue(signer.address.startswith("0x"))
+        # Hardhat #0 => 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+        self.assertEqual(signer.address.lower(), "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266")
+
+    def test_signer_dry_run_verify_agent(self):
+        from neural_mesh.integrations.helixa_signer import HelixaSigner
+        signer = HelixaSigner()
+        result = signer.verify_agent("5287", dry_run=True)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["agent_id"], "5287")
+        self.assertIn("dry_run=False", result["note"])
+
+    def test_signer_dry_run_update_profile(self):
+        from neural_mesh.integrations.helixa_signer import HelixaSigner
+        signer = HelixaSigner()
+        payload = {"personality": "autonomous chef", "narrative": "building on Base"}
+        result = signer.update_agent_profile("5287", payload, dry_run=True)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["payload_keys"], ["personality", "narrative"])
+
+    def test_signer_dry_run_attest_mesh_node(self):
+        from neural_mesh.integrations.helixa_signer import HelixaSigner
+        from neural_mesh import Mesh, MemoryType
+        signer = HelixaSigner()
+        m = Mesh(":memory:")
+        n = m.add("verified by Helixa on Base", MemoryType.SEMANTIC, by="helixa")
+        result = signer.attest_mesh_node(m, n.id, dry_run=True)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["dry_run"])
+        self.assertIn("message_hash", result)
+        self.assertEqual(result["agent_id"], "5287")
+
+    def test_signer_attest_mesh_node_writes_stamp(self):
+        from neural_mesh.integrations.helixa_signer import HelixaSigner
+        from neural_mesh.integrations.helixa_provenance import HelixaStamp
+        from neural_mesh import Mesh, MemoryType
+        signer = HelixaSigner()
+        m = Mesh(":memory:")
+        n = m.add("signed by Helixa agent wallet", MemoryType.SEMANTIC, by="helixa")
+        result = signer.attest_mesh_node(m, n.id, dry_run=False)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["verified"], "onchain_attested")
+
+        # Verify stamp
+        reloaded = m._load()[n.id]
+        stamp = HelixaStamp.from_meta(getattr(reloaded, "meta", {}) or {})
+        self.assertIsNotNone(stamp)
+        self.assertEqual(stamp.verified, "onchain_attested")
+        self.assertTrue(stamp.signature.startswith("0x"))
+
+    def test_signer_raises_on_missing_env_file(self):
+        import neural_mesh.integrations.helixa_signer as hs
+        old = hs.ENV_FILE
+        hs.ENV_FILE = "/nonexistent/path/.env"
+        try:
+            from neural_mesh.integrations.helixa_signer import HelixaSigner
+            with self.assertRaises(FileNotFoundError):
+                HelixaSigner()
+        finally:
+            hs.ENV_FILE = old
+

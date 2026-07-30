@@ -37,6 +37,7 @@ from .proof_cards import (
 from .server_security import RateLimiter, auth_ok, origin_allowed, safe_path
 from .reader_llm import LLMReader
 from .eval import QAJudge, run_qa_eval, load_test_set
+from .integrations.helixa_signer import HelixaSigner
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
@@ -51,5 +52,6 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "proof_card", "node_card", "recall_with_proofs",
            "answer_with_proofs", "citation_for_proof",
            "RateLimiter", "auth_ok", "origin_allowed", "safe_path",
-           "LLMReader", "QAJudge", "run_qa_eval", "load_test_set"]
-__version__ = "0.14.0"
+           "LLMReader", "QAJudge", "run_qa_eval", "load_test_set",
+           "HelixaSigner"]
+__version__ = "0.15.0"

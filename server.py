@@ -74,7 +74,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.14.0",
+        "version": "0.15.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -277,7 +277,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.14.0",
+        "version": "0.15.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -398,6 +398,46 @@ def eval_qa():
     try:
         metrics = run_qa_eval(mesh, test_set, judge=judge, top_k=top_k)
         return jsonify(metrics)
+    except Exception as exc:
+        return _json_error(str(exc), 500)
+
+@app.route("/helixa/signer-status", methods=["GET"])
+def helixa_signer_status():
+    """Report the Helixa signer status without exposing the key."""
+    from neural_mesh.integrations.helixa_signer import HelixaSigner, HELIXA_AGENT_ID
+    try:
+        signer = HelixaSigner()
+        return jsonify({
+            "ok": True,
+            "address": signer.address,
+            "agent_id": HELIXA_AGENT_ID,
+            "note": "Signer loaded. Use POST /helixa/attest-node for attestation (dry_run=true by default).",
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)})
+
+@app.route("/helixa/attest-node", methods=["POST"])
+def helixa_attest_node():
+    """Sign a mesh node attestation with the live Helixa agent wallet.
+
+    Body: {node_id, dry_run? default=true, aura_score?}
+
+    dry_run=false COMMITS a real signature from the agent wallet.
+    The private key is NEVER returned — only the signature + tx hash.
+    """
+    data = request.get_json() or {}
+    node_id = data.get("node_id", "")
+    if not node_id:
+        return _json_error("required: {node_id}", 400)
+
+    dry_run = data.get("dry_run", True)
+    aura_score = float(data.get("aura_score", 0.0))
+
+    from neural_mesh.integrations.helixa_signer import HelixaSigner
+    try:
+        signer = HelixaSigner()
+        result = signer.attest_mesh_node(mesh, node_id, dry_run=dry_run, aura_score=aura_score)
+        return jsonify(result)
     except Exception as exc:
         return _json_error(str(exc), 500)
 
