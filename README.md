@@ -286,7 +286,7 @@ hybrid     0.182   0.097   0.191  0.000  0.126   (best)
 5. **Conclusion:** the defensible, reproduced wins remain (a) **no-stale-truth
    versioning** (100% current top-1 vs 16.7% flat) and (b) **dense retrieval
    surfaces answer context ~59% more often than lexical** (0.176 vs 0.110
-   recall@5). End-to-end answer generation is future work (local LLM reader).
+   recall@5). Proof-aware extractive answers are supported; generated local-LLM answers remain future work.
 
 > Reproduce: `PYTHONPATH=. .venv/bin/python bench/locomo_qa.py --locomo locomo10.json --embedder real --top_k 5 --alpha 0.9`
 > (alpha sweep: try 0.3/0.5/0.7/0.9; α≈0.9 maximizes hybrid on this set)
@@ -518,6 +518,7 @@ POST /mesh/answer          — {query, context_chunks[]} → extractive reader
 - [x] Helixa / Agent Aura provenance scaffold (off-chain, review-gated)
 - [x] Intuition mainnet receipt ingestion — atoms/triples become high-trust recallable mesh memories
 - [x] Proof-aware recall cards — recalled memories can carry tx/term/block evidence next to claims
+- [x] Proof-aware answer mode — answers return supporting proof cards and compact citations
 - [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)
 - [ ] Rust hot path for large meshes
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer

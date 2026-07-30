@@ -112,4 +112,42 @@ def recall_with_proofs(mesh, query: str, top_k: int = 5, mode: str = "hybrid", a
     }
 
 
-__all__ = ["proof_card", "node_card", "recall_with_proofs", "short_hex"]
+def citation_for_proof(proof: dict[str, Any], index: int) -> str:
+    """Compact human citation for a proof card."""
+    if not proof:
+        return ""
+    if proof.get("proof_type") == "intuition_receipt":
+        return f"[{index}] {proof.get('network', '')} block {proof.get('block', '')} tx {proof.get('tx_short', '')}".strip()
+    if proof.get("proof_type") == "helixa_stamp":
+        agent = proof.get("agent_id", "")
+        verified = proof.get("verified", "")
+        return f"[{index}] Helixa agent {agent} {verified}".strip()
+    return f"[{index}] {proof.get('proof_type', 'proof')}"
+
+
+def answer_with_proofs(mesh, query: str, top_k: int = 5, mode: str = "hybrid", alpha: float = 0.5, reader=None) -> dict[str, Any]:
+    """Answer a query from recalled context and attach supporting proof cards.
+
+    Default reader is extractive: it returns the top retrieved passage. A custom
+    reader can be supplied as any object with ``answer(query, passages)``.
+    """
+    recalled = recall_with_proofs(mesh, query, top_k=top_k, mode=mode, alpha=alpha)
+    passages = [r["content"] for r in recalled["results"]]
+    if reader is None:
+        from .reader import ExtractiveReader
+        reader = ExtractiveReader()
+    answer = reader.answer(query, passages) if passages else ""
+    proofs = [r["proof"] for r in recalled["results"] if r.get("proof")]
+    citations = [citation_for_proof(p, i + 1) for i, p in enumerate(proofs)]
+    return {
+        "query": query,
+        "answer": answer,
+        "method": "extractive_with_proofs",
+        "proof_count": len(proofs),
+        "proofs": proofs,
+        "citations": citations,
+        "support": recalled["results"],
+    }
+
+
+__all__ = ["proof_card", "node_card", "recall_with_proofs", "answer_with_proofs", "citation_for_proof", "short_hex"]

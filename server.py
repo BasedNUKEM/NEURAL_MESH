@@ -35,7 +35,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.10.0",
+        "version": "0.11.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.10.0",
+        "version": "0.11.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -251,6 +251,22 @@ def recall_proof():
     data = request.get_json() or {}
     from neural_mesh.proof_cards import recall_with_proofs
     return jsonify(recall_with_proofs(
+        mesh,
+        data.get("query", ""),
+        top_k=int(data.get("top_k", 5)),
+        mode=data.get("mode", "hybrid"),
+        alpha=float(data.get("alpha", 0.5)),
+    ))
+
+@app.route("/mesh/answer-proof", methods=["POST"])
+def answer_proof():
+    """Answer from recalled mesh context and attach supporting proof cards.
+
+    Body: {query, top_k?, mode?, alpha?}. mode = hybrid|dense|lexical|resonance.
+    """
+    data = request.get_json() or {}
+    from neural_mesh.proof_cards import answer_with_proofs
+    return jsonify(answer_with_proofs(
         mesh,
         data.get("query", ""),
         top_k=int(data.get("top_k", 5)),

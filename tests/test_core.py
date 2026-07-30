@@ -433,6 +433,32 @@ class TestProofCards(unittest.TestCase):
         self.assertEqual(result["results"][0]["proof"]["claim"], "NEURAL_MESH → powers → Scam Detection Agent")
         self.assertEqual(result["results"][0]["proof"]["block"], "7875199")
 
+    def test_answer_with_proofs_returns_answer_and_supporting_cards(self):
+        from neural_mesh.proof_cards import answer_with_proofs
+        m = Mesh(":memory:")
+        m.add(
+            "Intuition triple verified: NEURAL_MESH → powers → Scam Detection Agent.",
+            MemoryType.SEMANTIC,
+            provenance="intuition-mainnet",
+            by="intuition-mainnet",
+            trust=0.99,
+            meta={
+                "source_kind": "intuition_receipt",
+                "network": "Intuition Mainnet",
+                "chain_id": "1155",
+                "triple_tx": "0x7b063ec91bb832661243bb3d2919ed48ec6cdc93d2d6298e60b32bff91865cde",
+                "block": "7875199",
+                "term_id": "0xae5a695d550e65af0dc27cb3432cabec5586a446832c94537eee154db854838e",
+                "statement": "NEURAL_MESH → powers → Scam Detection Agent",
+                "explorer_url": "https://explorer.intuition.systems/tx/0x7b063ec91bb832661243bb3d2919ed48ec6cdc93d2d6298e60b32bff91865cde",
+            },
+        )
+        out = answer_with_proofs(m, "What powers the scam detection agent?", top_k=1)
+        self.assertIn("NEURAL_MESH", out["answer"])
+        self.assertEqual(out["proof_count"], 1)
+        self.assertEqual(out["proofs"][0]["claim"], "NEURAL_MESH → powers → Scam Detection Agent")
+        self.assertEqual(out["citations"][0], "[1] Intuition Mainnet block 7875199 tx 0x7b063ec9…91865cde")
+
 
 class TestOnchainProvenance(unittest.TestCase):
     """Public chain receipts become high-trust recallable mesh memories."""
