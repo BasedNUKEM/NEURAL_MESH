@@ -35,7 +35,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.9.0",
+        "version": "0.10.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.9.0",
+        "version": "0.10.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -241,6 +241,22 @@ def answer():
     reader = ExtractiveReader()
     answer = reader.answer(data["query"], data["context_chunks"])
     return jsonify({"answer": answer, "method": "extractive_proxy"})
+
+@app.route("/mesh/recall-proof", methods=["POST"])
+def recall_proof():
+    """Recall memories with compact proof cards next to each hit.
+
+    Body: {query, top_k?, mode?, alpha?}. mode = hybrid|dense|lexical|resonance.
+    """
+    data = request.get_json() or {}
+    from neural_mesh.proof_cards import recall_with_proofs
+    return jsonify(recall_with_proofs(
+        mesh,
+        data.get("query", ""),
+        top_k=int(data.get("top_k", 5)),
+        mode=data.get("mode", "hybrid"),
+        alpha=float(data.get("alpha", 0.5)),
+    ))
 
 # ─── Intuition Bridge ────────────────────────────────────────────────────
 

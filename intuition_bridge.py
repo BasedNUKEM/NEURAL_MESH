@@ -369,7 +369,7 @@ class MeshIntuitionBridge:
             },
             "triples": [t.to_payload() for t in self.triples],
             "meta": {
-                "source": "NEURAL_MESH v0.9.0",
+                "source": "NEURAL_MESH v0.10.0",
                 "agent": "D0xed Dev (Helixa #5287)",
                 "erc8004_agent_id": HELIXA_AGENT_ID,
                 "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

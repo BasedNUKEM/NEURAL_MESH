@@ -517,6 +517,7 @@ POST /mesh/answer          — {query, context_chunks[]} → extractive reader
 - [x] Bulk ingest `add_many` (batched embedding for big corpora)
 - [x] Helixa / Agent Aura provenance scaffold (off-chain, review-gated)
 - [x] Intuition mainnet receipt ingestion — atoms/triples become high-trust recallable mesh memories
+- [x] Proof-aware recall cards — recalled memories can carry tx/term/block evidence next to claims
 - [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)
 - [ ] Rust hot path for large meshes
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer
