@@ -25,7 +25,6 @@ from __future__ import annotations
 import json
 import os
 import time
-import hashlib
 import urllib.request
 from typing import Any
 
@@ -41,66 +40,76 @@ from .helixa_attest import (
 # ── constants ──────────────────────────────────────────────────────────
 
 ENV_FILE = "/opt/data/.env.d0xeddev_populated"
+AGENT_WALLET_FILE = "/opt/data/D0XEDDEV/.agent_fresh_wallet.json"
 HELIXA_API_BASE = "https://helixa.xyz/api/v2"
 HELIXA_AGENT_ID = "5287"  # canonical D0xed Dev agent
-
-# Helixa SIWA domain
-SIWA_DOMAIN = {
-    "name": "Helixa",
-    "version": "1",
-    "chainId": 8453,  # Base mainnet
-}
-
-SIWA_TYPES = {
-    "EIP712Domain": [
-        {"name": "name", "type": "string"},
-        {"name": "version", "type": "string"},
-        {"name": "chainId", "type": "uint256"},
-    ],
-    "SiwaMessage": [
-        {"name": "uri", "type": "string"},
-        {"name": "issuedAt", "type": "string"},
-        {"name": "nonce", "type": "string"},
-    ],
-}
 
 
 # ── key loading (private — never exposed) ──────────────────────────────
 
-def _load_private_key() -> str:
-    """Load the Helixa agent wallet private key from the env file.
+def _load_key_from_json(path: str) -> tuple[str, str]:
+    """Load private key from a wallet JSON file."""
+    with open(path) as f:
+        wallet = json.load(f)
+    key = wallet.get("privateKey") or wallet.get("private_key") or ""
+    addr = wallet.get("address", "")
+    key = key.strip()
+    if key.startswith("0x") or key.startswith("0X"):
+        key = key[2:]
+    if len(key) != 64:
+        raise ValueError(f"Invalid key length in {path}: {len(key)} chars, expected 64")
+    return key, addr
 
-    Returns the hex key string. Caller MUST NOT log or expose it.
+
+def _load_private_key() -> tuple[str, str]:
+    """Load the Helixa agent controller private key.
+
+    Tries in order:
+      1. ``AGENT_WALLET_FILE`` (``.agent_fresh_wallet.json``) — the Helixa controller
+      2. ``ENV_FILE`` (``TRADING_WALLET_PRIVATE_KEY``) — the vault wallet
+
+    Returns ``(private_key_hex, wallet_address)``.
+    Caller MUST NOT log or expose the key.
     """
-    if not os.path.exists(ENV_FILE):
-        raise FileNotFoundError(
-            f"Helixa env file not found: {ENV_FILE}. "
-            "Ensure the agent wallet key is configured at this path."
-        )
+    # Prefer the agent wallet (Helixa controller: 0x789Bd4...ce2)
+    if os.path.exists(AGENT_WALLET_FILE):
+        try:
+            with open(AGENT_WALLET_FILE) as f:
+                wallet = json.load(f)
+            key = wallet.get("privateKey") or wallet.get("private_key") or ""
+            addr = wallet.get("address", "")
+            # Strip 0x prefix — eth_account accepts both, but we check length
+            key = key.strip()
+            if key.startswith("0x") or key.startswith("0X"):
+                key = key[2:]
+            if len(key) == 64:
+                return key, addr
+        except (json.JSONDecodeError, OSError):
+            pass
 
-    key = ""
-    with open(ENV_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith("export "):
-                line = line[7:]
-            if "=" not in line:
-                continue
-            var, _, val = line.partition("=")
-            val = val.strip().strip('"').strip("'")
-            if var in ("TRADING_WALLET_PRIVATE_KEY", "WALLET_PRIVATE_KEY"):
-                if val and len(val) == 64:  # 32-byte hex key
-                    key = val
-                    break
+    # Fall back to vault wallet (0x23129c...Ecd9)
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[7:]
+                if "=" not in line:
+                    continue
+                var, _, val = line.partition("=")
+                val = val.strip().strip('"').strip("'")
+                if var in ("TRADING_WALLET_PRIVATE_KEY", "WALLET_PRIVATE_KEY"):
+                    if val and len(val) == 64:
+                        return val, ""  # address will be derived
 
-    if not key:
-        raise ValueError(
-            "No valid private key found in env file. "
-            "Expected TRADING_WALLET_PRIVATE_KEY with a 64-char hex value."
-        )
-    return key
+    raise FileNotFoundError(
+        f"No valid private key found. Checked:\n"
+        f"  - {AGENT_WALLET_FILE}\n"
+        f"  - {ENV_FILE}\n"
+        "Expected a 64-char hex key in one of these locations."
+    )
 
 
 # ── Helixa signer ──────────────────────────────────────────────────────
@@ -112,42 +121,45 @@ class HelixaSigner:
     Pass ``dry_run=False`` to commit real state changes.
     """
 
-    def __init__(self, base_url: str = HELIXA_API_BASE):
+    def __init__(self, base_url: str = HELIXA_API_BASE, *, wallet_file: str | None = None):
+        """Create a Helixa signer.
+
+        Args:
+            base_url: Helixa API base URL.
+            wallet_file: Override path to wallet JSON. For testing.
+        """
         self.base_url = base_url.rstrip("/")
-        self._account = Account.from_key(_load_private_key())
-        self.address = self._account.address
+        # Allow overriding the wallet source for testing
+        if wallet_file is not None:
+            key, known_addr = _load_key_from_json(wallet_file)
+        else:
+            key, known_addr = _load_private_key()
+        self._account = Account.from_key(key)
+        self.address = known_addr or self._account.address
 
     # ── SIWA auth header ────────────────────────────────────────────
 
     def _siwa_header(self) -> dict[str, str]:
-        """Build the SIWA (Sign-In With Ethereum) authorization header."""
-        from eth_account.messages import encode_typed_data
-        now = int(time.time())
-        nonce = hashlib.sha256(str(now).encode()).hexdigest()[:16]
+        """Build the Helixa SIWA auth header.
+        
+        Format (verified 2026-07-25):
+          ``Authorization: Bearer <address>:<timestamp_ms>:0x<sig>``
+        Message:
+          ``Sign-In With Agent: api.helixa.xyz wants you to sign
+          in with your wallet <address> at <timestamp_ms>``
+        """
+        from eth_account.messages import encode_defunct
+        ts_ms = str(int(time.time() * 1000))
 
-        message = {
-            "uri": f"{self.base_url}/agent/verify",
-            "issuedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
-            "nonce": nonce,
-        }
-
-        full_msg = {
-            "types": SIWA_TYPES,
-            "domain": SIWA_DOMAIN,
-            "primaryType": "SiwaMessage",
-            "message": message,
-        }
-        encoded = encode_typed_data(full_msg)
+        message = (
+            f"Sign-In With Agent: api.helixa.xyz wants you to "
+            f"sign in with your wallet {self.address} at {ts_ms}"
+        )
+        encoded = encode_defunct(text=message)
         signed = self._account.sign_message(encoded)
         sig = signed.signature.hex()
 
-        # Helixa expects: SIWA address=<hex>,signature=<hex>,nonce=<str>,issuedAt=<iso>
-        header = (
-            f"SIWA address={self.address},"
-            f"signature=0x{sig},"
-            f"nonce={nonce},"
-            f"issuedAt={message['issuedAt']}"
-        )
+        header = f"Bearer {self.address}:{ts_ms}:0x{sig}"
         return {"Authorization": header, "Content-Type": "application/json"}
 
     # ── API calls ───────────────────────────────────────────────────
