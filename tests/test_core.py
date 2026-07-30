@@ -807,3 +807,126 @@ class TestHelixaAttestation(unittest.TestCase):
         with self.assertRaises(ValueError):
             attest_node(m, "nonexistent-id", "5287", sign_fn=lambda h: "0x00")
 
+
+class TestLoCoMoQA(unittest.TestCase):
+    """LLM-judged QA evaluation — scores mesh answers against ground truth."""
+
+    def _mock_judge_response(self, score=0.85, reasoning="correct"):
+        """Build a mock API response that the judge would return."""
+        import json
+        content = json.dumps({"score": score, "reasoning": reasoning})
+        return {"choices": [{"message": {"content": content}}]}
+
+    def test_simple_score_keyword_overlap(self):
+        from neural_mesh.eval import _simple_score
+        result = _simple_score("q", "Base L2 agent hub", "Base L2 agent hub powers D0xedDev")
+        self.assertGreater(result["score"], 0.0)
+        self.assertIn("keyword", result["reasoning"])
+
+    def test_simple_score_empty_answer(self):
+        from neural_mesh.eval import _simple_score
+        result = _simple_score("q", "", "something")
+        self.assertEqual(result["score"], 0.0)
+
+    def test_simple_score_no_overlap(self):
+        from neural_mesh.eval import _simple_score
+        result = _simple_score("q", "totally different words here", "Base L2 agent hub")
+        self.assertEqual(result["score"], 0.0)
+
+    def test_judge_falls_back_when_no_api_key(self):
+        from neural_mesh.eval import QAJudge
+        judge = QAJudge()
+        judge._llm.api_key = ""  # force fallback
+        result = judge.score("what is D0xedDev?", "agent hub on Base", "D0xedDev is an agent hub on Base L2")
+        self.assertIn("score", result)
+        self.assertIn("reasoning", result)
+        # Simple keyword overlap should detect some match
+        self.assertGreater(result["score"], 0.0)
+
+    def test_judge_uses_mock_response(self):
+        from neural_mesh.eval import QAJudge
+        judge = QAJudge(_post_fn=lambda p: self._mock_judge_response(0.9, "spot on"))
+        judge._llm.api_key = "fake-key"
+        result = judge.score("q?", "answer text", "ground truth text")
+        self.assertEqual(result["score"], 0.9)
+        self.assertEqual(result["reasoning"], "spot on")
+        self.assertEqual(result["question"], "q?")
+        self.assertEqual(result["answer"], "answer text")
+        self.assertEqual(result["gold"], "ground truth text")
+
+    def test_judge_clamps_score_to_range(self):
+        from neural_mesh.eval import QAJudge
+        # Score above 1.0 should be clamped
+        judge = QAJudge(_post_fn=lambda p: self._mock_judge_response(1.5, "too high"))
+        judge._llm.api_key = "fake-key"
+        result = judge.score("q", "a", "g")
+        self.assertEqual(result["score"], 1.0)
+
+        # Score below 0.0 should be clamped
+        judge2 = QAJudge(_post_fn=lambda p: self._mock_judge_response(-0.5, "too low"))
+        judge2._llm.api_key = "fake-key"
+        result2 = judge2.score("q", "a", "g")
+        self.assertEqual(result2["score"], 0.0)
+
+    def test_judge_handles_malformed_json(self):
+        from neural_mesh.eval import QAJudge
+        def bad_json(prompt):
+            return {"choices": [{"message": {"content": "not json at all"}}]}
+        judge = QAJudge(_post_fn=bad_json)
+        judge._llm.api_key = "fake-key"
+        result = judge.score("q?", "some answer", "some ground truth")
+        # Falls back to simple score — should get some keyword overlap
+        self.assertIn("score", result)
+
+    def test_load_test_set_from_jsonl(self):
+        from neural_mesh.eval import load_test_set
+        import tempfile, os
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False)
+        try:
+            tmp.write('{"query": "q1", "gold": "g1"}\n')
+            tmp.write('{"query": "q2", "gold": "g2"}\n')
+            tmp.write('# comment\n')
+            tmp.write('\n')
+            tmp.write('{"query": "q3", "gold": "g3"}\n')
+            tmp.close()
+            examples = load_test_set(tmp.name)
+            self.assertEqual(len(examples), 3)
+            self.assertEqual(examples[0]["query"], "q1")
+            self.assertEqual(examples[2]["gold"], "g3")
+        finally:
+            os.unlink(tmp.name)
+
+    def test_run_qa_eval_with_mock_judge(self):
+        from neural_mesh.eval import QAJudge, run_qa_eval
+        from neural_mesh import Mesh, MemoryType
+        import json
+
+        m = Mesh(":memory:")
+        m.add("D0xedDev is an autonomous agent hub on Base L2", MemoryType.SEMANTIC, by="test")
+        m.add("NEURAL_MESH powers scam detection with on-chain proof cards", MemoryType.SEMANTIC, by="test")
+        m.add("v0.13 shipped LLM-powered answer synthesis", MemoryType.SEMANTIC, by="test")
+
+        judge = QAJudge(_post_fn=lambda p: self._mock_judge_response(0.8, "decent"))
+        judge._llm.api_key = "fake-key"
+
+        test_set = [
+            {"query": "what is D0xedDev?", "gold": "an agent hub on Base L2"},
+            {"query": "what does NEURAL_MESH do?", "gold": "scam detection with proofs"},
+        ]
+
+        metrics = run_qa_eval(m, test_set, judge=judge, top_k=3)
+        self.assertEqual(metrics["total"], 2)
+        self.assertEqual(len(metrics["scores"]), 2)
+        self.assertGreater(metrics["mean"], 0.0)
+        # Each should get 0.8 from our mock
+        self.assertAlmostEqual(metrics["mean"], 0.8, delta=0.01)
+        self.assertEqual(len(metrics["per_item"]), 2)
+
+    def test_run_qa_eval_handles_empty_test_set(self):
+        from neural_mesh.eval import run_qa_eval
+        from neural_mesh import Mesh
+        m = Mesh(":memory:")
+        metrics = run_qa_eval(m, [])
+        self.assertEqual(metrics["total"], 0)
+        self.assertEqual(metrics["mean"], 0.0)
+

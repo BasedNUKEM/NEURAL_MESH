@@ -74,7 +74,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.13.0",
+        "version": "0.14.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -277,7 +277,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.13.0",
+        "version": "0.14.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -363,6 +363,43 @@ def intuition_ingest_receipts():
         path = default_path
     from neural_mesh.onchain_provenance import ingest_intuition_receipts
     return jsonify(ingest_intuition_receipts(mesh, path))
+
+@app.route("/eval/qa", methods=["POST"])
+def eval_qa():
+    """Evaluate mesh QA performance with an LLM judge.
+
+    Body: {examples: [{query, gold}, ...], judge_model?, top_k?}
+    Loads a test set into the mesh, runs recall+answer for each question,
+    and scores every answer against ground truth via LLM judge.
+
+    Returns aggregated metrics (mean, median, min, max) plus per-item scores.
+    Falls back to simple keyword-overlap scoring when no LLM key is available.
+    """
+    import json as _json
+    data = request.get_json() or {}
+
+    examples = data.get("examples")
+    if not examples or not isinstance(examples, list):
+        return _json_error("required: {examples: [{query, gold}, ...]}", 400)
+
+    from neural_mesh.eval import QAJudge, run_qa_eval
+    judge_model = data.get("judge_model")
+    top_k = int(data.get("top_k", 5))
+
+    # Wire up LLM judge if env has a key (same detection as LLMReader)
+    judge = QAJudge(model=judge_model) if judge_model else QAJudge()
+
+    test_set = [
+        {"query": str(ex.get("query", ex.get("q", ""))),
+         "gold": str(ex.get("gold", ex.get("answer", ex.get("a", ""))))}
+        for ex in examples
+    ]
+
+    try:
+        metrics = run_qa_eval(mesh, test_set, judge=judge, top_k=top_k)
+        return jsonify(metrics)
+    except Exception as exc:
+        return _json_error(str(exc), 500)
 
 # ─── Server ────────────────────────────────────────────────────────────────
 

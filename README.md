@@ -533,6 +533,7 @@ wrapper unless deployed behind a real production gateway.
 - [x] LLM-powered answer synthesis — `LLMReader` calls OpenRouter to synthesize answers from retrieved context
 - [x] Helixa on-chain attestation gateway — sign locally via injectable fn, broadcast optionally, never expose key
 - [x] npm dependency audit resolved — lodash override (4.18.1) drops 6 high vulns to 0
+- [x] LoCoMo QA evaluation — LLM judge scores mesh answers against ground truth with `/eval/qa`
 - [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)  ← LLMReader enables this
 - [ ] Rust hot path for large meshes
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer
