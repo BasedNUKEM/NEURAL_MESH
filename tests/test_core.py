@@ -377,6 +377,74 @@ class TestDreamCycle(unittest.TestCase):
         self.assertAlmostEqual(reloaded.meta["author_weight"], expected, places=2)
 
 
+class TestOnchainProvenance(unittest.TestCase):
+    """Public chain receipts become high-trust recallable mesh memories."""
+
+    SAMPLE = """# Intuition Mainnet Deployment Receipts
+Date: 2026-07-30
+Network: Intuition Mainnet
+Chain ID: 1155
+Signer / creator: `0x23129c0472172D75bEd1e6dd061301796760Ecd9`
+MultiVault: `0x6E35cF57A41fA15eA0EaE9C33e751b01A784Fe7e`
+
+## Entity Atoms
+| Label | Tx | Term ID |
+|---|---|---|
+| D0xedDev | `0xd01d24d148e0b2b2e7364b7ab69a2547a0d053a965bbd9684da7974b570c8a7a` | `0x0d2a3c63c6edee7e1113ddb55b3d6884c0da23505c21df29ce7834937ba0b466` |
+| NEURAL_MESH | `0xc66522a0d8c8ca7462292c92637d6970771b3d7c68bcaa8618a919a73fda46d2` | `0xc306d7c016e7edc78eced957d95fd8e909fd8deeb176000ac61da5c6b0b0dde8` |
+
+## Predicate Atoms
+| Label | Tx | Term ID |
+|---|---|---|
+| composedOf | `0x6feeb0e08a46400df02a6250c45e7db2b4985c5f2a583963a49f25d9ae23a45d` | `0x10a9c91f16b59d6d13868961a4f617a3a687ccebbc5f798547f6a9530335ff83` |
+
+## Triple Batch
+Tx: `0x7b063ec91bb832661243bb3d2919ed48ec6cdc93d2d6298e60b32bff91865cde`
+Block: `7875199`
+Status: success
+Batch value: `0.440000000008 TRUST`.
+
+| Statement | Triple term ID |
+|---|---|
+| D0xedDev → composedOf → NEURAL_MESH | `0x9bca7031cac3d6c29339c901a746dac88cbf58b511a5d2d2782bbda0581f7727` |
+
+## Balance
+Before triple batch: `80.823816218967923549 TRUST`
+After triple batch: `80.383798249269923549 TRUST`
+"""
+
+    def test_parse_intuition_receipt(self):
+        from neural_mesh.onchain_provenance import parse_intuition_receipts
+        receipt = parse_intuition_receipts(self.SAMPLE)
+        self.assertEqual(receipt.chain_id, "1155")
+        self.assertEqual(receipt.status, "success")
+        self.assertEqual(len(receipt.entity_atoms), 2)
+        self.assertEqual(len(receipt.predicate_atoms), 1)
+        self.assertEqual(len(receipt.triples), 1)
+        self.assertEqual(receipt.multivault, "0x6E35cF57A41fA15eA0EaE9C33e751b01A784Fe7e")
+        self.assertEqual(receipt.triples[0].parts, ("D0xedDev", "composedOf", "NEURAL_MESH"))
+
+    def test_ingest_receipts_is_idempotent_and_recallable(self):
+        from neural_mesh.onchain_provenance import ingest_intuition_receipts
+        path = tempfile.mktemp(suffix=".md")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.SAMPLE)
+            m = Mesh(":memory:")
+            first = ingest_intuition_receipts(m, path)
+            second = ingest_intuition_receipts(m, path)
+            self.assertEqual(first["added"], 5)  # digest + 3 atoms + 1 triple
+            self.assertEqual(second["added"], 0)
+            self.assertEqual(second["skipped"], 5)
+            hits = m.hybrid_recall("Intuition NEURAL_MESH composedOf", top_k=5)
+            joined = " ".join(h.content for h in hits)
+            self.assertIn("Intuition triple verified", joined)
+            self.assertIn("NEURAL_MESH", joined)
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
+
 class TestAssociativeRecall(unittest.TestCase):
     """Resonance/spreading activation reaches path-dependent targets dense misses.
 

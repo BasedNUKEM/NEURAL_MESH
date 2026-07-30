@@ -25,6 +25,11 @@ from .integrations.helixa_provenance import (
     HelixaStamp, stamp_node, verify_stamp, aura_trust_weight,
     export_manifest, make_stamp,
 )
+from .onchain_provenance import (
+    IntuitionDeploymentReceipt, IntuitionTripleReceipt,
+    parse_intuition_receipts, load_intuition_receipts,
+    receipt_memory_payloads, ingest_intuition_receipts,
+)
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
@@ -32,5 +37,8 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "dream", "recall_associative", "Reader", "ExtractiveReader",
            "CallableReader",
            "HelixaStamp", "stamp_node", "verify_stamp", "aura_trust_weight",
-           "export_manifest", "make_stamp"]
-__version__ = "0.8.0"
+           "export_manifest", "make_stamp",
+           "IntuitionDeploymentReceipt", "IntuitionTripleReceipt",
+           "parse_intuition_receipts", "load_intuition_receipts",
+           "receipt_memory_payloads", "ingest_intuition_receipts"]
+__version__ = "0.9.0"

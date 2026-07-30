@@ -516,6 +516,7 @@ POST /mesh/answer          — {query, context_chunks[]} → extractive reader
 - [x] LoRA-ready sleep distillation (consolidated-memory finetune data)
 - [x] Bulk ingest `add_many` (batched embedding for big corpora)
 - [x] Helixa / Agent Aura provenance scaffold (off-chain, review-gated)
+- [x] Intuition mainnet receipt ingestion — atoms/triples become high-trust recallable mesh memories
 - [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)
 - [ ] Rust hot path for large meshes
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer

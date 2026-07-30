@@ -35,7 +35,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.8.0",
+        "version": "0.9.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.8.0",
+        "version": "0.9.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -251,6 +251,19 @@ def intuition_export():
     skills = request.args.get("skills", "")
     skills_list = [s.strip() for s in skills.split(",") if s.strip()] if skills else None
     return jsonify(build_intuition_graph(skills_list))
+
+@app.route("/mesh/intuition/ingest-receipts", methods=["POST"])
+def intuition_ingest_receipts():
+    """Ingest public Intuition receipt markdown as high-trust mesh memories.
+
+    Body: {path?: string}. Defaults to the local deployment receipt file.
+    Idempotent: tx/term-derived conflict groups prevent duplicate proof nodes.
+    """
+    data = request.get_json() or {}
+    default_path = os.path.join(os.path.dirname(__file__), "intuition-client", "INTUITION_DEPLOY_RECEIPTS.md")
+    path = data.get("path", default_path)
+    from neural_mesh.onchain_provenance import ingest_intuition_receipts
+    return jsonify(ingest_intuition_receipts(mesh, path))
 
 # ─── Server ────────────────────────────────────────────────────────────────
 
