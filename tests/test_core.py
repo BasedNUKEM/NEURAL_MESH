@@ -405,6 +405,93 @@ class TestServerHardening(unittest.TestCase):
         self.assertTrue(limiter.allow("127.0.0.1", now=161.0))
 
 
+class TestLLMReader(unittest.TestCase):
+    """LLM-powered reader synthesizes answers from retrieved passages.
+
+    Follows the proven OpenRouter pattern from muse.py (pure stdlib urllib).
+    """
+
+    def test_llm_reader_builds_prompt_from_passages(self):
+        from neural_mesh.reader_llm import LLMReader
+        reader = LLMReader(api_key="sk-test")
+        prompt = reader._build_prompt(
+            "What powers the scam detection agent?",
+            ["NEURAL_MESH → powers → Scam Detection Agent on Intuition Mainnet.",
+             "The agent uses on-chain triple attestation for provenance."],
+        )
+        self.assertIn("What powers the scam detection agent", prompt)
+        self.assertIn("NEURAL_MESH", prompt)
+        self.assertIn("triple attestation", prompt)
+        self.assertIn("ANSWER:", prompt)
+
+    def test_llm_reader_extracts_answer_from_response(self):
+        from neural_mesh.reader_llm import LLMReader
+        reader = LLMReader(api_key="sk-test")
+        mock_body = {
+            "choices": [{"message": {"content": "ANSWER: NEURAL_MESH powers the Scam Detection Agent on Intuition Mainnet via a verified triple."}}]
+        }
+        answer = reader._extract_answer(mock_body)
+        self.assertEqual(answer, "NEURAL_MESH powers the Scam Detection Agent on Intuition Mainnet via a verified triple.")
+
+    def test_llm_reader_falls_back_on_empty_api_key(self):
+        from neural_mesh.reader_llm import LLMReader
+        reader = LLMReader(api_key="")
+        answer = reader.answer("test query", ["passage one", "passage two"])
+        self.assertEqual(answer, "passage one")
+
+    def test_llm_reader_falls_back_on_empty_passages(self):
+        from neural_mesh.reader_llm import LLMReader
+        reader = LLMReader(api_key="sk-test")
+        answer = reader.answer("test query", [])
+        self.assertEqual(answer, "")
+
+    def test_llm_reader_accepts_injectable_post_fn(self):
+        from neural_mesh.reader_llm import LLMReader
+        calls = []
+
+        def fake_post(req):
+            calls.append(req)
+            import json
+            return json.loads('{"choices":[{"message":{"content":"ANSWER: synthetic answer from mock."}}]}')
+
+        reader = LLMReader(api_key="sk-test", _post_fn=fake_post)
+        answer = reader.answer("test query", ["context passage"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(answer, "synthetic answer from mock.")
+
+    def test_answer_with_proofs_accepts_llm_reader(self):
+        from neural_mesh.reader_llm import LLMReader
+        from neural_mesh.proof_cards import answer_with_proofs
+        m = Mesh(":memory:")
+        m.add(
+            "Intuition triple verified: NEURAL_MESH → powers → Scam Detection Agent.",
+            MemoryType.SEMANTIC,
+            provenance="intuition-mainnet",
+            by="intuition-mainnet",
+            trust=0.99,
+            meta={
+                "source_kind": "intuition_receipt",
+                "network": "Intuition Mainnet",
+                "chain_id": "1155",
+                "triple_tx": "0x7b063ec91bb832661243bb3d2919ed48ec6cdc93d2d6298e60b32bff91865cde",
+                "block": "7875199",
+                "term_id": "0xae5a695d550e65af0dc27cb3432cabec5586a446832c94537eee154db854838e",
+                "statement": "NEURAL_MESH → powers → Scam Detection Agent",
+            },
+        )
+
+        def fake_post(req):
+            import json
+            return json.loads('{"choices":[{"message":{"content":"ANSWER: NEURAL_MESH powers the Scam Detection Agent."}}]}')
+
+        reader = LLMReader(api_key="sk-test", _post_fn=fake_post)
+        out = answer_with_proofs(m, "What powers the scam detection agent?", top_k=1, reader=reader)
+        self.assertIn("NEURAL_MESH", out["answer"])
+        self.assertIn("Scam Detection Agent", out["answer"])
+        self.assertEqual(out["proof_count"], 1)
+        self.assertIn("llm", out["method"])
+
+
 class TestDashboardSafety(unittest.TestCase):
     """The public dashboard must render mesh content safely and expose proof answers."""
 
@@ -611,4 +698,112 @@ class TestAssociativeRecall(unittest.TestCase):
             ((cosine(qe, n.embedding), n) for n in m._load().values()),
             key=lambda x: -x[0])[:5]]
         self.assertNotIn(ids[-1], dense_ids)
+
+
+class TestHelixaAttestation(unittest.TestCase):
+    """On-chain attestation gateway — sign locally, record in mesh, optional broadcast.
+
+    NEVER exposes private keys. Signing is via injectable sign_fn.
+    """
+
+    def test_build_attestation_message_is_deterministic(self):
+        from neural_mesh.integrations.helixa_attest import build_attestation_message, AttestationMessage
+        m = Mesh(":memory:")
+        n = m.add("NEURAL_MESH powers scam detection", MemoryType.SEMANTIC, by="helixa")
+        msg1 = build_attestation_message(n, "5287")
+        msg2 = build_attestation_message(n, "5287")
+        self.assertEqual(msg1.signing_hash(), msg2.signing_hash())
+        self.assertEqual(msg1.agent_id, "5287")
+        self.assertEqual(msg1.node_id, n.id)
+        self.assertIsInstance(msg1, AttestationMessage)
+
+    def test_build_attestation_message_differs_per_node(self):
+        from neural_mesh.integrations.helixa_attest import build_attestation_message
+        m = Mesh(":memory:")
+        a = m.add("memory A", MemoryType.SEMANTIC, by="helixa")
+        b = m.add("memory B", MemoryType.SEMANTIC, by="helixa")
+        h1 = build_attestation_message(a, "5287").signing_hash()
+        h2 = build_attestation_message(b, "5287").signing_hash()
+        self.assertNotEqual(h1, h2)
+
+    def test_sign_attestation_uses_injected_sign_fn(self):
+        from neural_mesh.integrations.helixa_attest import build_attestation_message, sign_attestation
+        m = Mesh(":memory:")
+        n = m.add("test content", MemoryType.SEMANTIC, by="helixa")
+        msg = build_attestation_message(n, "5287")
+
+        signed = []
+        def fake_sign(hash_hex):
+            signed.append(hash_hex)
+            return "0x" + "ab" * 32
+
+        sig = sign_attestation(msg, fake_sign)
+        self.assertEqual(len(signed), 1)
+        self.assertEqual(signed[0], msg.signing_hash())
+        self.assertEqual(sig, "0x" + "ab" * 32)
+
+    def test_record_onchain_attestation_stamps_node(self):
+        from neural_mesh.integrations.helixa_attest import record_onchain_attestation
+        from neural_mesh.integrations.helixa_provenance import HelixaStamp
+        m = Mesh(":memory:")
+        n = m.add("verified memory", MemoryType.SEMANTIC, by="helixa")
+        result = record_onchain_attestation(
+            m, n.id, signature="0xdeadbeef", tx_hash="0xcafe",
+            agent_id="5287", aura_score=0.85,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["verified"], "onchain_attested")
+        self.assertEqual(result["tx_hash"], "0xcafe")
+
+        reloaded = m._load()[n.id]
+        stamp = HelixaStamp.from_meta(getattr(reloaded, "meta", {}) or {})
+        self.assertIsNotNone(stamp)
+        self.assertEqual(stamp.verified, "onchain_attested")
+        self.assertEqual(stamp.signature, "0xdeadbeef")
+        self.assertEqual(stamp.tx_hash, "0xcafe")
+
+    def test_attest_node_full_flow_without_broadcast(self):
+        from neural_mesh.integrations.helixa_attest import attest_node
+        m = Mesh(":memory:")
+        n = m.add("attest this", MemoryType.SEMANTIC, by="helixa")
+
+        def fake_sign(hash_hex):
+            return "0x" + "cd" * 32
+
+        result = attest_node(m, n.id, "5287", sign_fn=fake_sign, aura_score=0.9)
+        self.assertTrue(result["ok"])
+        self.assertIsNone(result["tx_hash"])
+        self.assertIn("message_hash", result)
+
+        # Verify the stamp landed
+        from neural_mesh.integrations.helixa_provenance import HelixaStamp
+        reloaded = m._load()[n.id]
+        stamp = HelixaStamp.from_meta(getattr(reloaded, "meta", {}) or {})
+        self.assertEqual(stamp.verified, "onchain_attested")
+        self.assertEqual(stamp.aura_score, 0.9)
+
+    def test_attest_node_with_broadcast(self):
+        from neural_mesh.integrations.helixa_attest import attest_node
+        m = Mesh(":memory:")
+        n = m.add("broadcast this", MemoryType.SEMANTIC, by="helixa")
+
+        def fake_sign(hash_hex):
+            return "0x" + "ef" * 32
+
+        broadcast_calls = []
+        def fake_broadcast(signature, message_json):
+            broadcast_calls.append((signature, message_json))
+            return "0xtx_broadcast_123"
+
+        result = attest_node(m, n.id, "5287", sign_fn=fake_sign,
+                             broadcast_fn=fake_broadcast, aura_score=0.75)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["tx_hash"], "0xtx_broadcast_123")
+        self.assertEqual(len(broadcast_calls), 1)
+
+    def test_attest_node_raises_on_missing_node(self):
+        from neural_mesh.integrations.helixa_attest import attest_node
+        m = Mesh(":memory:")
+        with self.assertRaises(ValueError):
+            attest_node(m, "nonexistent-id", "5287", sign_fn=lambda h: "0x00")
 

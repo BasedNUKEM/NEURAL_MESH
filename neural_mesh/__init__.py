@@ -35,6 +35,7 @@ from .proof_cards import (
     answer_with_proofs, citation_for_proof,
 )
 from .server_security import RateLimiter, auth_ok, origin_allowed, safe_path
+from .reader_llm import LLMReader
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
@@ -48,5 +49,6 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "receipt_memory_payloads", "ingest_intuition_receipts",
            "proof_card", "node_card", "recall_with_proofs",
            "answer_with_proofs", "citation_for_proof",
-           "RateLimiter", "auth_ok", "origin_allowed", "safe_path"]
-__version__ = "0.12.0"
+           "RateLimiter", "auth_ok", "origin_allowed", "safe_path",
+           "LLMReader"]
+__version__ = "0.13.0"

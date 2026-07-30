@@ -74,7 +74,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.12.0",
+        "version": "0.13.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -277,7 +277,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.12.0",
+        "version": "0.13.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -312,16 +312,26 @@ def recall_proof():
 def answer_proof():
     """Answer from recalled mesh context and attach supporting proof cards.
 
-    Body: {query, top_k?, mode?, alpha?}. mode = hybrid|dense|lexical|resonance.
+    Body: {query, top_k?, mode?, alpha?, reader_mode?}. mode = hybrid|dense|lexical|resonance.
+    reader_mode = "extractive" (default) | "llm".
     """
     data = request.get_json() or {}
     from neural_mesh.proof_cards import answer_with_proofs
+    reader_mode = data.get("reader_mode", "extractive")
+    reader = None
+    if reader_mode == "llm":
+        try:
+            from neural_mesh.reader_llm import LLMReader
+            reader = LLMReader()
+        except Exception:
+            pass  # fall back to extractive
     return jsonify(answer_with_proofs(
         mesh,
         data.get("query", ""),
         top_k=int(data.get("top_k", 5)),
         mode=data.get("mode", "hybrid"),
         alpha=float(data.get("alpha", 0.5)),
+        reader=reader,
     ))
 
 # ─── Intuition Bridge ────────────────────────────────────────────────────

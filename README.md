@@ -530,7 +530,10 @@ wrapper unless deployed behind a real production gateway.
 - [x] Proof-aware answer mode — answers return supporting proof cards and compact citations
 - [x] Flask/API hardening — optional bearer auth, path allowlists, rate limits, JSON cap, locked CORS, safe dashboard escaping
 - [x] Ask-the-Mesh dashboard panel — local UI calls `/mesh/answer-proof` and renders proof cards safely
-- [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)
+- [x] LLM-powered answer synthesis — `LLMReader` calls OpenRouter to synthesize answers from retrieved context
+- [x] Helixa on-chain attestation gateway — sign locally via injectable fn, broadcast optionally, never expose key
+- [x] npm dependency audit resolved — lodash override (4.18.1) drops 6 high vulns to 0
+- [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)  ← LLMReader enables this
 - [ ] Rust hot path for large meshes
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer
 

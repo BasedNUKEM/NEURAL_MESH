@@ -137,12 +137,18 @@ def answer_with_proofs(mesh, query: str, top_k: int = 5, mode: str = "hybrid", a
         from .reader import ExtractiveReader
         reader = ExtractiveReader()
     answer = reader.answer(query, passages) if passages else ""
+    # Detect reader type for honest method labelling
+    try:
+        from .reader_llm import LLMReader
+        method = "llm_with_proofs" if isinstance(reader, LLMReader) else "extractive_with_proofs"
+    except Exception:
+        method = "extractive_with_proofs"
     proofs = [r["proof"] for r in recalled["results"] if r.get("proof")]
     citations = [citation_for_proof(p, i + 1) for i, p in enumerate(proofs)]
     return {
         "query": query,
         "answer": answer,
-        "method": "extractive_with_proofs",
+        "method": method,
         "proof_count": len(proofs),
         "proofs": proofs,
         "citations": citations,
