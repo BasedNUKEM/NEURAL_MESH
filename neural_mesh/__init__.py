@@ -34,6 +34,7 @@ from .proof_cards import (
     proof_card, node_card, recall_with_proofs,
     answer_with_proofs, citation_for_proof,
 )
+from .server_security import RateLimiter, auth_ok, origin_allowed, safe_path
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
@@ -46,5 +47,6 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "parse_intuition_receipts", "load_intuition_receipts",
            "receipt_memory_payloads", "ingest_intuition_receipts",
            "proof_card", "node_card", "recall_with_proofs",
-           "answer_with_proofs", "citation_for_proof"]
-__version__ = "0.11.0"
+           "answer_with_proofs", "citation_for_proof",
+           "RateLimiter", "auth_ok", "origin_allowed", "safe_path"]
+__version__ = "0.12.0"

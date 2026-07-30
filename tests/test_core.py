@@ -377,6 +377,48 @@ class TestDreamCycle(unittest.TestCase):
         self.assertAlmostEqual(reloaded.meta["author_weight"], expected, places=2)
 
 
+class TestServerHardening(unittest.TestCase):
+    """Reusable server hardening helpers stay pure-stdlib and testable."""
+
+    def test_safe_path_stays_inside_base_dir(self):
+        from neural_mesh.server_security import safe_path
+        base = tempfile.mkdtemp()
+        self.assertEqual(safe_path(base, "exports/demo.mesh"), os.path.join(base, "exports", "demo.mesh"))
+        with self.assertRaises(ValueError):
+            safe_path(base, "../agent-wallet.key")
+        with self.assertRaises(ValueError):
+            safe_path(base, "/opt/data/.secrets/agent-wallet.key")
+
+    def test_auth_check_is_optional_then_strict_when_token_set(self):
+        from neural_mesh.server_security import auth_ok
+        self.assertTrue(auth_ok({}, ""))
+        self.assertFalse(auth_ok({}, "sekret"))
+        self.assertTrue(auth_ok({"Authorization": "Bearer sekret"}, "sekret"))
+        self.assertTrue(auth_ok({"X-API-Key": "sekret"}, "sekret"))
+
+    def test_rate_limiter_blocks_after_limit(self):
+        from neural_mesh.server_security import RateLimiter
+        limiter = RateLimiter(limit=2, window_seconds=60)
+        self.assertTrue(limiter.allow("127.0.0.1", now=100.0))
+        self.assertTrue(limiter.allow("127.0.0.1", now=101.0))
+        self.assertFalse(limiter.allow("127.0.0.1", now=102.0))
+        self.assertTrue(limiter.allow("127.0.0.1", now=161.0))
+
+
+class TestDashboardSafety(unittest.TestCase):
+    """The public dashboard must render mesh content safely and expose proof answers."""
+
+    def test_dashboard_escapes_dynamic_content_and_calls_answer_proof(self):
+        path = os.path.join(os.path.dirname(HERE), "static", "dashboard.html")
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn("function escapeHTML", html)
+        self.assertIn("/answer-proof", html)
+        self.assertIn("Ask the Mesh", html)
+        self.assertNotIn("${n.content}", html)
+        self.assertNotIn("${e.message}", html)
+
+
 class TestProofCards(unittest.TestCase):
     """Recall can emit compact evidence cards for proof-backed memories."""
 

@@ -16,6 +16,16 @@ body { background: #0a0a0f; color: #e0e0e0; font-family: system-ui, sans-serif; 
 .card .value { font-size: 1.8rem; font-weight: 700; color: #00d4ff; }
 .prov-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
 .prov-bar div { height: 100%; }
+.panel { background: #12121f; border: 1px solid #1e1e3a; border-radius: 12px; margin-bottom: 2rem; overflow: hidden; }
+.panel h2 { padding: 1rem 1.2rem; border-bottom: 1px solid #1e1e3a; font-size: 1rem; color: #ccc; }
+.ask { display: flex; gap: 0.75rem; padding: 1rem 1.2rem; flex-wrap: wrap; }
+.ask input { flex: 1; min-width: 260px; background: #0a0a0f; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 8px; padding: 0.8rem; }
+.ask button { background: #00d4ff; color: #041018; border: 0; border-radius: 8px; padding: 0.8rem 1rem; font-weight: 700; cursor: pointer; }
+.answer { padding: 0 1.2rem 1.2rem; color: #d6f7ff; line-height: 1.5; }
+.proofs { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+.proof { background: #0f1726; border: 1px solid #24445f; border-radius: 10px; padding: 0.8rem; font-size: 0.82rem; }
+.proof .claim { color: #fff; margin-bottom: 0.4rem; }
+.proof .cite { color: #00d4ff; font-family: ui-monospace, monospace; font-size: 0.75rem; }
 .nodes { background: #12121f; border: 1px solid #1e1e3a; border-radius: 12px; overflow: hidden; }
 .nodes h2 { padding: 1rem 1.2rem; border-bottom: 1px solid #1e1e3a; font-size: 1rem; color: #ccc; }
 .node { display: flex; gap: 1rem; padding: 0.8rem 1.2rem; border-bottom: 1px solid #1a1a2a; align-items: flex-start; }
@@ -44,8 +54,16 @@ body { background: #0a0a0f; color: #e0e0e0; font-family: system-ui, sans-serif; 
 </div>
 
 <div class="grid" id="stats"></div>
-
 <div id="provBreakdown" style="margin-bottom:1rem"></div>
+
+<div class="panel">
+  <h2>🔎 Ask the Mesh</h2>
+  <div class="ask">
+    <input id="askInput" value="What powers the scam detection agent on Intuition?" aria-label="Ask NEURAL_MESH">
+    <button onclick="askMesh()">Ask with receipts</button>
+  </div>
+  <div id="answer" class="answer"><span style="color:#777">Ask a question to see an extractive answer plus proof cards.</span></div>
+</div>
 
 <div class="nodes">
   <h2>📡 Public Feed</h2>
@@ -56,6 +74,16 @@ body { background: #0a0a0f; color: #e0e0e0; font-family: system-ui, sans-serif; 
 const API = '/mesh';
 const COLORS = ['#00d4ff','#7b61ff','#ff6b6b','#51cf66','#ffd43b','#ff922b','#20c997','#f06595','#845ef7','#339af0'];
 
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  }[ch]));
+}
+
+function setError(id, error) {
+  document.getElementById(id).innerHTML = '<div class="error">Error: ' + escapeHTML(error.message || error) + '</div>';
+}
+
 async function load() {
   try {
     const [stats, pub] = await Promise.all([
@@ -64,46 +92,72 @@ async function load() {
     ]);
 
     document.getElementById('version').textContent = 'v' + stats.version;
-
-    // Stats cards
     document.getElementById('stats').innerHTML = `
-      <div class="card"><div class="label">Total Nodes</div><div class="value">${stats.total_nodes}</div></div>
-      <div class="card"><div class="label">Active</div><div class="value">${stats.active_nodes}</div></div>
-      <div class="card"><div class="label">Consolidated</div><div class="value">${stats.consolidated}</div></div>
-      <div class="card"><div class="label">Provenance Sources</div><div class="value">${stats.provenance_breakdown.length}</div></div>
+      <div class="card"><div class="label">Total Nodes</div><div class="value">${Number(stats.total_nodes || 0)}</div></div>
+      <div class="card"><div class="label">Active</div><div class="value">${Number(stats.active_nodes || 0)}</div></div>
+      <div class="card"><div class="label">Consolidated</div><div class="value">${Number(stats.consolidated || 0)}</div></div>
+      <div class="card"><div class="label">Provenance Sources</div><div class="value">${Number((stats.provenance_breakdown || []).length)}</div></div>
     `;
 
-    // Provenance bars
-    const maxCount = Math.max(...stats.provenance_breakdown.map(p=>p.count));
-    let bars = stats.provenance_breakdown.map((p,i) => 
-      `<div style="background:${COLORS[i%COLORS.length]};width:${(p.count/maxCount*100)}%"></div>`
+    const breakdown = stats.provenance_breakdown || [];
+    const maxCount = Math.max(1, ...breakdown.map(p=>Number(p.count || 0)));
+    const bars = breakdown.map((p,i) =>
+      `<div style="background:${COLORS[i%COLORS.length]};width:${(Number(p.count || 0)/maxCount*100)}%"></div>`
     ).join('');
     document.getElementById('provBreakdown').innerHTML = `
       <div class="prov-bar">${bars}</div>
       <div class="prov-colors">
-        ${stats.provenance_breakdown.map((p,i) => 
-          `<div class="prov-dot"><span style="background:${COLORS[i%COLORS.length]}"></span>${p.source||'unknown'} (${p.count})</div>`
+        ${breakdown.map((p,i) =>
+          `<div class="prov-dot"><span style="background:${COLORS[i%COLORS.length]}"></span>${escapeHTML(p.source || 'unknown')} (${Number(p.count || 0)})</div>`
         ).join('')}
       </div>
     `;
 
-    // Feed
     if (pub.results && pub.results.length) {
       document.getElementById('feed').innerHTML = pub.results.map(n => `
         <div class="node">
           <div class="meta">
-            <div class="prov">${n.provenance||'unknown'}</div>
-            <div class="by">by ${n.by||'?'}${n.helixa ? ' 🟦#'+n.helixa : ''}</div>
+            <div class="prov">${escapeHTML(n.provenance || 'unknown')}</div>
+            <div class="by">by ${escapeHTML(n.by || '?')}${n.helixa ? ' 🟦#'+escapeHTML(n.helixa) : ''}</div>
           </div>
-          <div class="content">${n.content}</div>
-          <div class="trust">${n.trust.toFixed(2)}</div>
+          <div class="content">${escapeHTML(n.content)}</div>
+          <div class="trust">${Number(n.trust || 0).toFixed(2)}</div>
         </div>
       `).join('');
     } else {
       document.getElementById('feed').innerHTML = '<div class="loading">No public nodes yet. Seed the mesh!</div>';
     }
   } catch(e) {
-    document.getElementById('feed').innerHTML = `<div class="error">Error: ${e.message}</div>`;
+    setError('feed', e);
+  }
+}
+
+async function askMesh() {
+  const query = document.getElementById('askInput').value.trim();
+  if (!query) return;
+  document.getElementById('answer').innerHTML = '<div class="loading">Querying proof-backed memory…</div>';
+  try {
+    const res = await fetch(API+'/answer-proof', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query, top_k: 5, mode: 'hybrid'})
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || 'request failed');
+    const proofs = (out.proofs || []).map((p, i) => `
+      <div class="proof">
+        <div class="claim">${escapeHTML(p.claim || 'proof')}</div>
+        <div class="cite">${escapeHTML((out.citations || [])[i] || '')}</div>
+        ${p.url ? `<div><a href="${escapeHTML(p.url)}" target="_blank" rel="noreferrer">open receipt</a></div>` : ''}
+      </div>
+    `).join('');
+    document.getElementById('answer').innerHTML = `
+      <div><strong>Answer:</strong> ${escapeHTML(out.answer || 'No answer found.')}</div>
+      <div style="color:#888;font-size:0.8rem;margin-top:0.35rem">mode: extractive with proof cards • proofs: ${Number(out.proof_count || 0)}</div>
+      <div class="proofs">${proofs}</div>
+    `;
+  } catch(e) {
+    setError('answer', e);
   }
 }
 

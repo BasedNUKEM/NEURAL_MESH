@@ -490,7 +490,16 @@ POST /mesh/stamp          — {node_id, agent_id, aura_score?, verified_handle?}
 GET  /mesh/public?q=&limit=N — searchable public feed
 GET  /mesh/stats           — node count + provenance breakdown
 POST /mesh/answer          — {query, context_chunks[]} → extractive reader
+POST /mesh/recall-proof    — {query, top_k?, mode?} → recall + proof cards
+POST /mesh/answer-proof    — {query, top_k?, mode?} → answer + citations + proof cards
 ```
+
+Server hardening (v0.12.0): mutating endpoints can require `NEURAL_MESH_API_TOKEN`
+(`Authorization: Bearer ...` or `X-API-Key`), import/export paths are constrained
+under `NEURAL_MESH_SAFE_IO_DIR`, requests are rate-limited, JSON bodies are capped,
+CORS is denied unless `NEURAL_MESH_CORS_ORIGINS` is set, and the dashboard escapes
+mesh content before rendering. The server is still intended as a local/dev Flask
+wrapper unless deployed behind a real production gateway.
 
 **Live deployment (D0xedDev VPS):**
 - 40 nodes, 11 `dream-muse` provenance entries
@@ -519,6 +528,8 @@ POST /mesh/answer          — {query, context_chunks[]} → extractive reader
 - [x] Intuition mainnet receipt ingestion — atoms/triples become high-trust recallable mesh memories
 - [x] Proof-aware recall cards — recalled memories can carry tx/term/block evidence next to claims
 - [x] Proof-aware answer mode — answers return supporting proof cards and compact citations
+- [x] Flask/API hardening — optional bearer auth, path allowlists, rate limits, JSON cap, locked CORS, safe dashboard escaping
+- [x] Ask-the-Mesh dashboard panel — local UI calls `/mesh/answer-proof` and renders proof cards safely
 - [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)
 - [ ] Rust hot path for large meshes
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer

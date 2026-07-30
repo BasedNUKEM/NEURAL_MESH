@@ -15,8 +15,47 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask, request, jsonify, send_from_directory
 from neural_mesh.core import Mesh, MemoryType
+from neural_mesh.server_security import RateLimiter, auth_ok, origin_allowed, safe_path
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("NEURAL_MESH_MAX_JSON_BYTES", "1048576"))
+
+API_TOKEN = os.environ.get("NEURAL_MESH_API_TOKEN", "")
+SAFE_IO_DIR = os.environ.get("NEURAL_MESH_SAFE_IO_DIR", os.path.join(os.path.dirname(__file__), "runtime"))
+ALLOWED_ORIGINS = {o.strip() for o in os.environ.get("NEURAL_MESH_CORS_ORIGINS", "").split(",") if o.strip()}
+RATE_LIMITER = RateLimiter(
+    limit=int(os.environ.get("NEURAL_MESH_RATE_LIMIT", "120")),
+    window_seconds=int(os.environ.get("NEURAL_MESH_RATE_WINDOW", "60")),
+)
+AUTH_ENDPOINTS = {"add", "dream", "export_mesh", "merge", "stamp", "intuition_ingest_receipts"}
+POLICY_FIELDS = {"trust", "cap_trust", "allow_new", "allow_merge"}
+
+
+def _json_error(message: str, status: int):
+    return jsonify({"ok": False, "error": message}), status
+
+
+@app.before_request
+def harden_request():
+    if not RATE_LIMITER.allow(request.remote_addr or "local"):
+        return _json_error("rate limit exceeded", 429)
+    if request.method in {"POST", "PUT", "PATCH"} and request.is_json is False:
+        return _json_error("JSON body required", 415)
+    if request.endpoint in AUTH_ENDPOINTS and not auth_ok(request.headers, API_TOKEN):
+        return _json_error("authorization required", 401)
+    origin = request.headers.get("Origin", "")
+    if ALLOWED_ORIGINS and not origin_allowed(origin, ALLOWED_ORIGINS):
+        return _json_error("origin not allowed", 403)
+
+
+@app.after_request
+def harden_response(resp):
+    origin = request.headers.get("Origin", "")
+    if ALLOWED_ORIGINS and origin_allowed(origin, ALLOWED_ORIGINS):
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Vary"] = "Origin"
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return resp
 
 # Persist to a file so data survives restarts.
 # Set check_same_thread=False because Flask's dev server uses threads.
@@ -35,7 +74,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.11.0",
+        "version": "0.12.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -130,7 +169,10 @@ def dream():
 def export_mesh():
     """Export mesh to .mesh JSONL. Body: {path?}"""
     data = request.get_json() or {}
-    path = data.get("path", "/tmp/mesh_export.mesh")
+    try:
+        path = safe_path(SAFE_IO_DIR, data.get("path", "exports/mesh_export.mesh"))
+    except ValueError as e:
+        return _json_error(str(e), 400)
     from neural_mesh.meshfile import export_mesh as em
     em(mesh, path)
     return jsonify({"path": path, "ok": True})
@@ -140,8 +182,16 @@ def merge():
     """Merge peer mesh. Body: {path, policy?{min_trust, max_nodes, dedup_by_hash}}"""
     data = request.get_json()
     from neural_mesh.sharing import PeerPolicy, merge_peer_mesh
-    policy = PeerPolicy(**data.get("policy", {})) if "policy" in data else None
-    result = merge_peer_mesh(mesh, data["path"], policy=policy)
+    raw_policy = data.get("policy", {})
+    unknown = set(raw_policy) - POLICY_FIELDS
+    if unknown:
+        return _json_error(f"unknown policy fields: {sorted(unknown)}", 400)
+    policy = PeerPolicy(**raw_policy) if raw_policy else None
+    try:
+        path = safe_path(SAFE_IO_DIR, data["path"])
+    except (KeyError, ValueError) as e:
+        return _json_error(str(e), 400)
+    result = merge_peer_mesh(mesh, path, policy=policy)
     return jsonify({"added": result.get("added", 0), "skipped": result.get("skipped", 0)})
 
 # ─── Helixa Provenance ─────────────────────────────────────────────────────
@@ -227,7 +277,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.11.0",
+        "version": "0.12.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -293,7 +343,14 @@ def intuition_ingest_receipts():
     """
     data = request.get_json() or {}
     default_path = os.path.join(os.path.dirname(__file__), "intuition-client", "INTUITION_DEPLOY_RECEIPTS.md")
-    path = data.get("path", default_path)
+    raw_path = data.get("path")
+    if raw_path:
+        try:
+            path = safe_path(SAFE_IO_DIR, raw_path)
+        except ValueError as e:
+            return _json_error(str(e), 400)
+    else:
+        path = default_path
     from neural_mesh.onchain_provenance import ingest_intuition_receipts
     return jsonify(ingest_intuition_receipts(mesh, path))
 

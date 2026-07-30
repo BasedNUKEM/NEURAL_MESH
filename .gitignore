@@ -3,5 +3,12 @@ __pycache__/
 *.pyc
 *.db
 *.db-journal
+runtime/
 .DS_Store
 intuition-client/node_modules/
+# Local-only deployment/signing scratch scripts; never stage signer-path helpers.
+intuition-client/local-scratch/
+intuition-client/*sign*.mjs
+intuition-client/*deploy*.mjs
+intuition-client/*triple*.mjs
+intuition-client/verify-key.mjs
