@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "neural-mesh"
+version = "0.18.0"
+description = "Self-organizing, self-forgetting agentic memory mesh — resonance retrieval beats flat vector search"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Devio", email = "basednukem@users.noreply.github.com"},
+]
+keywords = [
+    "ai", "agents", "memory", "llm", "vector-search", "knowledge-graph",
+    "agentic-memory", "retrieval", "rag", "context-window", "embeddings",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.10"
+dependencies = [
+    # Core is pure stdlib — zero required deps for basic use.
+    # Optional deps for richer features:
+    #   fastembed — real embeddings (pip install neural-mesh[embeddings])
+    #   eth-account — Helixa onchain signing (pip install neural-mesh[onchain])
+]
+
+[project.optional-dependencies]
+embeddings = ["fastembed>=0.5"]
+onchain = ["eth-account>=0.13"]
+full = ["neural-mesh[embeddings,onchain]"]
+
+[project.urls]
+Homepage = "https://github.com/BasedNUKEM/NEURAL_MESH"
+Documentation = "https://github.com/BasedNUKEM/NEURAL_MESH#readme"
+Repository = "https://github.com/BasedNUKEM/NEURAL_MESH"
+Issues = "https://github.com/BasedNUKEM/NEURAL_MESH/issues"
+
+[tool.setuptools.packages.find]
+include = ["neural_mesh*"]
+
+[tool.setuptools.package-data]
+neural_mesh = ["py.typed"]
+
+[project.scripts]
+neural-mesh = "neural_mesh.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

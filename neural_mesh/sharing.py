@@ -113,8 +113,10 @@ def merge_peer_mesh(local_mesh, peer_file: str,
             for k, v in pn.links.items():
                 if not k.startswith(("__", "superseded::", "supersedes::")):
                     loc.links[k] = max(loc.links.get(k, 0.0), float(v))
-            if pn.agent_id not in loc.agent_id.split("+"):
-                loc.agent_id = (loc.agent_id + "+" + pn.agent_id).strip("+")
+            if loc.agent_id and pn.agent_id not in loc.agent_id.split("+"):
+                loc.agent_id = loc.agent_id + "+" + pn.agent_id
+            elif not loc.agent_id:
+                loc.agent_id = pn.agent_id
             local_mesh._save(loc)
             matches[0] = loc
             fused += 1

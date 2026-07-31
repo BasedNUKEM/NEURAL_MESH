@@ -37,8 +37,22 @@ from .proof_cards import (
 from .server_security import RateLimiter, auth_ok, origin_allowed, safe_path
 from .reader_llm import LLMReader
 from .eval import QAJudge, run_qa_eval, load_test_set
-from .integrations.helixa_signer import HelixaSigner
-from .integrations.yantrikdb_bridge import YantrikDBBridge
+# Lazy imports for optional heavy deps — only loaded when actually used,
+# so `pip install neural-mesh` works without eth-account / yantrikdb.
+_LAZY = {}
+
+def __getattr__(name):
+    if name == "HelixaSigner":
+        if "HelixaSigner" not in _LAZY:
+            from .integrations.helixa_signer import HelixaSigner as _HS
+            _LAZY["HelixaSigner"] = _HS
+        return _LAZY["HelixaSigner"]
+    if name == "YantrikDBBridge":
+        if "YantrikDBBridge" not in _LAZY:
+            from .integrations.yantrikdb_bridge import YantrikDBBridge as _YB
+            _LAZY["YantrikDBBridge"] = _YB
+        return _LAZY["YantrikDBBridge"]
+    raise AttributeError(f"module 'neural_mesh' has no attribute {name!r}")
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",

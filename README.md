@@ -556,6 +556,31 @@ wrapper unless deployed behind a real production gateway.
 
 ---
 
+### v0.18.0 — Cross-Agent Mesh + Package + Rust Accelerator (2026-07-31)
+
+**🚀 Cross-Agent Mesh Sharing** — `.mesh` is now a public protocol:
+- `export_mesh(mesh, path)` → portable JSONL file with schema versioning + embedder fingerprint
+- `import_mesh(path, mesh)` → load from any agent, auto re-embed with local embedder
+- `merge_peer_mesh(local, peer_file, policy)` → trust-weighted fusion: same fact from two agents = corroborated trust
+- `consensus_rank(nodes)` → highest-trust claim wins, contradictors annotated never dropped
+- `PeerPolicy(trust, cap_trust, allow_new, allow_merge)` → per-peer trust controls
+- 17 new tests (meshfile + sharing) — zero new deps
+
+**📦 Package & Ship** — `pip install neural-mesh` now works:
+- `pyproject.toml` with `[project.optional-dependencies]` for embeddings / onchain
+- `neural-mesh` CLI: `export`, `import`, `merge`, `benchmark`, `info`, `rust-info`
+- Pure-stdlib core stays pip-free; `eth-account` etc. lazy-loaded
+
+**⚡ Rust Graph Accelerator** — optional `rust_mesh` extension (pyo3):
+- `cosine_similarity` + `bulk_cosine_similarity` — vector ops
+- `Graph` with `bfs`, `associative_recall`, `shortest_path` (Dijkstra)
+- Benchmarks (50K nodes / 500K edges): **16–17x speedup** on resonance-critical ops
+- Drop `rust_mesh.so` next to `neural_mesh/` to activate; zero changes to Python API
+
+**🏛️ Intuition Bridge** — `IntuitionDeploymentReceipt` + `IntuitionTripleReceipt` for onchain knowledge-graph attestation.
+
+---
+
 ## Contributing
 
 This started as a fork-shaped idea off `NousResearch/hermes-agent` and the
