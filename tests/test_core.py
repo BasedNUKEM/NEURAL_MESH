@@ -1003,3 +1003,126 @@ class TestHelixaSignerLive(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             HelixaSigner(wallet_file="/nonexistent/wallet.json")
 
+
+class TestYantrikDBBridge(unittest.TestCase):
+    """Tests for the optional YantrikDB memory / contradiction bridge."""
+
+    def setUp(self):
+        from neural_mesh import Mesh
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self._tmpdir.name, "test.db")
+        self.mesh = Mesh(":memory:")
+        # Seed a few nodes so ingest/recall has data
+        from neural_mesh import MemoryType
+        self.mesh.add("Base L2 is the rollup chain for Ethereum scaling", MemoryType.SEMANTIC, by="test")
+        self.mesh.add("DEVIO token is live on Base at 0x3d447A...", MemoryType.SEMANTIC, by="devio")
+        self.mesh.add("Helixa agent #5287 verified on-chain", MemoryType.PROCEDURAL, by="helixa")
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_bridge_init_creates_db(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        self.assertTrue(br.available, "bridge should be available when yantrikdb is installed")
+
+    def test_bridge_unavailable_guards(self):
+        import neural_mesh.integrations.yantrikdb_bridge as br_mod
+        real_ok = br_mod._YANTRIKDB_OK
+        try:
+            br_mod._YANTRIKDB_OK = False
+            from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+            br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+            self.assertFalse(br.available)
+            self.assertEqual(br.ingest_mesh(), {"ok": False, "error": "yantrikdb not available"})
+            self.assertEqual(br.contradictions(), {"ok": False, "error": "yantrikdb not available", "conflicts": []})
+            self.assertEqual(br.gaps(), {"ok": False, "error": "yantrikdb not available", "gaps": []})
+            self.assertEqual(br.think(), {"ok": False, "error": "yantrikdb not available"})
+            self.assertEqual(br.stats(), {"ok": False, "error": "yantrikdb not available"})
+        finally:
+            br_mod._YANTRIKDB_OK = real_ok
+
+    def test_ingest_mesh(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        result = br.ingest_mesh()
+        self.assertTrue(result["ok"])
+        self.assertGreaterEqual(result["written"], 1)
+        self.assertEqual(result["scanned"], 3)
+
+    def test_contradictions_empty_on_fresh_db(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        br.ingest_mesh()
+        result = br.contradictions()
+        self.assertIn("conflicts", result)
+
+    def test_gaps_empty_on_fresh_db(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        br.ingest_mesh()
+        result = br.gaps()
+        self.assertIn("gaps", result)
+
+    def test_think_noop_on_fresh_db(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        br.ingest_mesh()
+        result = br.think()
+        self.assertIn("consolidation_count", result)
+
+    def test_stats_after_ingest(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        br.ingest_mesh()
+        result = br.stats()
+        self.assertGreaterEqual(result.get("active_memories", 0), 1)
+
+    def test_recall_finds_ingested(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        br.ingest_mesh()
+        result = br.recall("DEVIO token")
+        self.assertIsInstance(result.get("results"), list)
+        self.assertGreater(len(result.get("results", [])), 0)
+
+    def test_enhanced_recall_merges_sources(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        br.ingest_mesh()
+        result = br.enhanced_recall("Base L2", top_k=5)
+        self.assertTrue(result["ok"])
+        self.assertGreater(result["count"], 0)
+        # Should have both mesh and yantrikdb results (or at least one)
+        self.assertGreaterEqual(result["mesh_hits"] + result["yantrikdb_hits"], 1)
+
+    def test_enhanced_recall_falls_back_when_unavailable(self):
+        import neural_mesh.integrations.yantrikdb_bridge as br_mod
+        real_ok = br_mod._YANTRIKDB_OK
+        try:
+            br_mod._YANTRIKDB_OK = False
+            from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+            br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+            result = br.enhanced_recall("Base L2", top_k=3)
+            self.assertTrue(result["ok"])
+            self.assertGreater(result["count"], 0)
+            self.assertGreater(result["mesh_hits"], 0)
+            self.assertEqual(result["yantrikdb_hits"], 0)
+        finally:
+            br_mod._YANTRIKDB_OK = real_ok
+
+    def test_record_turn(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        result = br.record_turn("user", "what's the DEVIO contract?")
+        self.assertTrue(result.get("recorded"))
+
+    def test_define_and_search_skills(self):
+        from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+        br = YantrikDBBridge(self.mesh, db_path=self.db_path)
+        d = br.define_skill("workflow.ship.release", "When shipping a new release: run the full test suite, commit all changes, tag the version, and push to the remote. Always verify health before shipping.")
+        self.assertTrue(d.get("stored"), f"define_skill failed: {d}")
+        s = br.search_skills("ship")
+        self.assertIn("skills", s)
+        self.assertGreater(s.get("total", 0), 0)
+

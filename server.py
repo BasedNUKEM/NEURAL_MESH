@@ -416,6 +416,79 @@ def helixa_signer_status():
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
 
+
+# ─── YantrikDB Bridge ──────────────────────────────────────────────────
+
+def _yantrikdb_bridge():
+    """Lazy-init the bridge (single instance across requests)."""
+    from neural_mesh.integrations.yantrikdb_bridge import YantrikDBBridge
+    return YantrikDBBridge(
+        mesh,
+        db_path=os.environ.get("YANTRIKDB_DB_PATH", "/opt/data/yantrikdb/memory.db"),
+        namespace=os.environ.get("YANTRIKDB_NAMESPACE", "d0xeddev"),
+        top_k=int(os.environ.get("YANTRIKDB_TOP_K", "10")),
+    )
+
+@app.route("/yantrikdb/status", methods=["GET"])
+def yantrikdb_status():
+    """YantrikDB bridge availability + embedded stats."""
+    br = _yantrikdb_bridge()
+    return jsonify({"available": br.available, "stats": br.stats()})
+
+@app.route("/yantrikdb/ingest", methods=["POST"])
+def yantrikdb_ingest():
+    """Sync existing mesh nodes into yantrikdb (idempotent)."""
+    br = _yantrikdb_bridge()
+    data = request.get_json() or {}
+    return jsonify(br.ingest_mesh(limit=int(data.get("limit", 1000))))
+
+@app.route("/yantrikdb/contradictions", methods=["GET"])
+def yantrikdb_contradictions():
+    br = _yantrikdb_bridge()
+    return jsonify(br.contradictions())
+
+@app.route("/yantrikdb/gaps", methods=["GET"])
+def yantrikdb_gaps():
+    br = _yantrikdb_bridge()
+    limit = int(request.args.get("limit", 20))
+    return jsonify(br.gaps(limit=limit))
+
+@app.route("/yantrikdb/think", methods=["POST"])
+def yantrikdb_think():
+    """Self-direction pass: consolidate + conflict scan."""
+    br = _yantrikdb_bridge()
+    return jsonify(br.think())
+
+@app.route("/yantrikdb/recall", methods=["POST"])
+def yantrikdb_recall():
+    """Explainable recall via yantrikdb (per-hit scoring reasons)."""
+    data = request.get_json() or {}
+    br = _yantrikdb_bridge()
+    return jsonify(br.recall(
+        data.get("query", ""),
+        top_k=int(data.get("top_k", 10)),
+    ))
+
+@app.route("/yantrikdb/enhanced-recall", methods=["POST"])
+def yantrikdb_enhanced_recall():
+    """Merge mesh hybrid recall + yantrikdb explainable recall."""
+    data = request.get_json() or {}
+    br = _yantrikdb_bridge()
+    return jsonify(br.enhanced_recall(
+        data.get("query", ""),
+        top_k=int(data.get("top_k", 5)),
+        mode=data.get("mode", "hybrid"),
+        alpha=float(data.get("alpha", 0.9)),
+    ))
+
+@app.route("/yantrikdb/skills/search", methods=["POST"])
+def yantrikdb_skills_search():
+    data = request.get_json() or {}
+    br = _yantrikdb_bridge()
+    return jsonify(br.search_skills(
+        data.get("query", ""), top_k=int(data.get("top_k", 5)),
+    ))
+
 @app.route("/helixa/attest-node", methods=["POST"])
 def helixa_attest_node():
     """Sign a mesh node attestation with the live Helixa agent wallet.
