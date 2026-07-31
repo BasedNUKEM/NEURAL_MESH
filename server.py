@@ -102,7 +102,7 @@ def add():
 
 @app.route("/mesh/recall", methods=["POST"])
 def recall():
-    """Body: {query, limit?, type_filter?, mode?} — mode: "resonance"|"dense"|"hybrid"|"lexical" """
+    """Body: {query, limit?, mode?} — mode: "resonance"|"dense"|"hybrid"|"lexical" """
     data = request.get_json()
     mode = data.get("mode", "resonance")
     limit = data.get("limit", 10)
@@ -117,7 +117,6 @@ def recall():
         nodes = mesh.recall(
             data["query"],
             top_k=limit,
-            type_filter=data.get("type_filter"),
         )
 
     return jsonify({
