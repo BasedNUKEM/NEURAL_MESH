@@ -1,0 +1,28 @@
+[Unit]
+Description=NEURAL_MESH Memory Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/data/NEURAL_MESH
+EnvironmentFile=/opt/data/NEURAL_MESH/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=NEURAL_MESH_HOST=127.0.0.1
+Environment=NEURAL_MESH_PORT=4021
+ExecStart=/usr/bin/python3 /opt/data/NEURAL_MESH/server.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=neural-mesh
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/data/NEURAL_MESH
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
