@@ -116,7 +116,7 @@ def recall():
     else:
         nodes = mesh.recall(
             data["query"],
-            limit=limit,
+            top_k=limit,
             type_filter=data.get("type_filter"),
         )
 
