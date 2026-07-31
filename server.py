@@ -74,7 +74,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.16.0",
+        "version": "0.17.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -277,7 +277,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.16.0",
+        "version": "0.17.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
