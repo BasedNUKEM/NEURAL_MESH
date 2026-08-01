@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask, request, jsonify, send_from_directory
 from neural_mesh.core import Mesh, MemoryType
+from neural_mesh.lifecycle import MemoryLifecycle
 from neural_mesh.server_security import RateLimiter, auth_ok, origin_allowed, safe_path
 
 app = Flask(__name__)
@@ -27,7 +28,7 @@ RATE_LIMITER = RateLimiter(
     limit=int(os.environ.get("NEURAL_MESH_RATE_LIMIT", "120")),
     window_seconds=int(os.environ.get("NEURAL_MESH_RATE_WINDOW", "60")),
 )
-AUTH_ENDPOINTS = {"add", "dream", "export_mesh", "merge", "stamp", "intuition_ingest_receipts"}
+AUTH_ENDPOINTS = {"add", "memory_cycle", "dream", "export_mesh", "merge", "stamp", "intuition_ingest_receipts"}
 POLICY_FIELDS = {"trust", "cap_trust", "allow_new", "allow_merge"}
 
 
@@ -63,6 +64,15 @@ DB_PATH = os.environ.get("NEURAL_MESH_DB", os.path.join(os.path.dirname(__file__
 mesh = Mesh(db_path=DB_PATH)
 mesh.db = sqlite3.connect(DB_PATH, check_same_thread=False)  # Overwrite with thread-safe connection
 mesh.db.row_factory = sqlite3.Row  # Critical: Mesh._load() indexes rows by column name
+POINTER_ROOT = os.environ.get(
+    "NEURAL_MESH_POINTER_ROOT",
+    os.path.join(os.path.dirname(__file__), "runtime", "pointers"),
+)
+lifecycle = MemoryLifecycle(
+    mesh,
+    pointer_root=POINTER_ROOT,
+    pointer_threshold=int(os.environ.get("NEURAL_MESH_POINTER_THRESHOLD", "8192")),
+)
 
 # ─── Health ────────────────────────────────────────────────────────────────
 
@@ -74,7 +84,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.18.0",
+        "version": "0.19.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -92,11 +102,11 @@ def add():
     data = request.get_json()
     node = mesh.add(
         content=data["content"],
-        memory_type=MemoryType(data.get("type", "semantic")),
-        provenance=data.get("provenance"),
-        supersedes=data.get("supersedes"),
+        type=MemoryType(data.get("type", "semantic")),
+        provenance=data.get("provenance", ""),
+        supersedes=data.get("supersedes", ""),
         meta=data.get("meta"),
-        by=data.get("by"),
+        by=data.get("by", ""),
     )
     return jsonify({"id": node.id, "content": node.content, "type": node.type.value})
 
@@ -125,6 +135,46 @@ def recall():
             for n in nodes
         ]
     })
+
+
+@app.route("/mesh/cycle", methods=["POST"])
+def memory_cycle():
+    """Run pointer-safe ingest → routed recall → lanes → sleep.
+
+    Body: {payload, query, label?, type?, mode?, top_k?, alpha?,
+           hot_ttl?, cold_threshold?, prune_below?, max_age_days?}
+    """
+    data = request.get_json() or {}
+    if "payload" not in data or "query" not in data:
+        return _json_error("payload and query are required", 400)
+    try:
+        report = lifecycle.cycle(
+            data["payload"],
+            query=data["query"],
+            label=data.get("label", "data"),
+            type=MemoryType(data.get("type", "semantic")),
+            provenance=data.get("provenance", ""),
+            lane=data.get("lane", "hot"),
+            trust=float(data.get("trust", 1.0)),
+            summary=data.get("summary", ""),
+            meta=data.get("meta"),
+            mode=data.get("mode", "fact"),
+            top_k=int(data.get("top_k", 5)),
+            alpha=float(data.get("alpha", 0.9)),
+            hot_ttl=float(data.get("hot_ttl", 86_400.0)),
+            cold_threshold=int(data.get("cold_threshold", 3)),
+            prune_below=float(data.get("prune_below", 0.05)),
+            max_age_days=float(data.get("max_age_days", 30.0)),
+        )
+    except (TypeError, ValueError) as exc:
+        return _json_error(str(exc), 400)
+    hits = report["retrieval"]["hits"]
+    report["retrieval"]["hits"] = [
+        {"id": n.id, "content": n.content, "type": n.type.value,
+         "lane": n.lane, "trust": n.trust, "meta": n.meta}
+        for n in hits
+    ]
+    return jsonify(report)
 
 # ─── DREAM ─────────────────────────────────────────────────────────────────
 
@@ -276,7 +326,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.18.0",
+        "version": "0.19.0",
         "provenance_breakdown": provenance_breakdown,
     })
 

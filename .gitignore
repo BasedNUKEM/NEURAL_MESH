@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 *.db
 *.db-journal
+.env
+build/
+*.egg-info/
 runtime/
 .DS_Store
 intuition-client/node_modules/

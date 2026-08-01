@@ -21,6 +21,7 @@ from .sharing import merge_peer_mesh, consensus_rank, PeerPolicy, export_for_pee
 from .lora_dataset import write_jsonl, write_hf_jsonl, write_weights, summarize
 from .dream import dream, recall_associative
 from .reader import Reader, ExtractiveReader, CallableReader
+from .lifecycle import MemoryLifecycle
 from .integrations.helixa_provenance import (
     HelixaStamp, stamp_node, verify_stamp, aura_trust_weight,
     export_manifest, make_stamp,
@@ -58,7 +59,7 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "merge_peer_mesh", "consensus_rank", "PeerPolicy", "export_for_peer",
            "write_jsonl", "write_hf_jsonl", "write_weights", "summarize",
            "dream", "recall_associative", "Reader", "ExtractiveReader",
-           "CallableReader",
+           "CallableReader", "MemoryLifecycle",
            "HelixaStamp", "stamp_node", "verify_stamp", "aura_trust_weight",
            "export_manifest", "make_stamp",
            "IntuitionDeploymentReceipt", "IntuitionTripleReceipt",
@@ -69,4 +70,4 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "RateLimiter", "auth_ok", "origin_allowed", "safe_path",
            "LLMReader", "QAJudge", "run_qa_eval", "load_test_set",
            "HelixaSigner"]
-__version__ = "0.18.0"
+__version__ = "0.19.0"

@@ -101,6 +101,36 @@ m = Mesh(embedder=RealEmbedder())"
 
 ---
 
+## Integrated lifecycle (v0.19)
+
+The four core primitives can now run as one inspectable production cycle:
+
+```python
+from neural_mesh import MemoryLifecycle, MemoryType, Mesh
+
+brain = MemoryLifecycle(
+    Mesh("mesh.db"),
+    pointer_root="runtime/pointers",
+    pointer_threshold=8_192,
+)
+
+report = brain.cycle(
+    huge_tool_output,
+    query="what happened during deploy?",
+    label="deploy-log",
+    type=MemoryType.EPISODIC,
+    mode="fact",  # dense-heavy hybrid; use "associative" for resonance
+)
+```
+
+The flow is **pointer-safe ingest → routed retrieval → hot/cold consolidation →
+sleep/replay/prune**. Payloads above the threshold stay outside model context;
+the mesh stores a searchable preview plus `mesh://…` pointer metadata. Use
+`mode="fact"` for direct lookup and `mode="associative"` when graph spreading is
+the desired behavior. The REST equivalent is `POST /mesh/cycle`.
+
+---
+
 ## Quickstart
 
 ```python
@@ -555,6 +585,23 @@ wrapper unless deployed behind a real production gateway.
 | `bench/` | Reproducible benchmarks (versioning, locomo, sharing, distill, tests) |
 
 ---
+
+### v0.19.0 — Integrated Memory Lifecycle (2026-08-01)
+
+🟦 `MemoryLifecycle` composes pointer-safe ingest, routed fact/associative recall,
+hot/cold consolidation, and sleep into one inspectable cycle.
+
+🟦 `POST /mesh/cycle` exposes the full workflow over REST and serializes compact
+memory hits instead of raw payloads.
+
+🟦 Oversized payloads are externalized automatically; searchable nodes retain a
+preview, `mesh://` pointer, payload size, provenance, and trust.
+
+🟦 Fact lookup defaults to dense-heavy hybrid retrieval while associative mode
+uses resonance spreading, matching each primitive to the task it measures well.
+
+🟦 Fixed `/mesh/add` silently ignoring the requested memory type because it passed
+`memory_type=` into `Mesh.add(**extra_meta)` instead of the real `type=` parameter.
 
 ### v0.18.0 — Cross-Agent Mesh + Package + Rust Accelerator (2026-07-31)
 
