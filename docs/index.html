@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEURAL_MESH Brain — v0.20.0 — D0xedDev</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;510;590&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#08090a; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
+canvas { display:block; position:fixed; top:0; left:0; z-index:1; }
+#hud { position:fixed; top:0; left:0; right:0; z-index:10; pointer-events:none; padding:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem; }
+#hud > * { pointer-events:auto; }
+.brand { display:flex; align-items:center; gap:0.6rem; }
+.brand h1 { font-size:1.1rem; font-weight:590; color:#f7f8f8; letter-spacing:-0.02em; }
+.brand .ver { font-size:0.7rem; color:#8a8f98; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(255,255,255,0.04); padding:2px 8px; border-radius:4px; }
+.hud-card { background:rgba(15,16,17,0.92); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:0.8rem 1rem; backdrop-filter:blur(12px); }
+.hud-card .label { font-size:0.65rem; color:#62666d; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.2rem; }
+.hud-card .value { font-size:1.4rem; font-weight:590; color:#f7f8f8; }
+.hud-card .sub { font-size:0.7rem; color:#8a8f98; margin-top:0.15rem; }
+#stats-grid { display:flex; gap:0.6rem; flex-wrap:wrap; }
+#legend { position:fixed; bottom:1.5rem; left:1.5rem; z-index:10; display:flex; gap:1rem; flex-wrap:wrap; }
+.legend-item { display:flex; align-items:center; gap:0.4rem; font-size:0.7rem; color:#8a8f98; background:rgba(15,16,17,0.85); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:0.35rem 0.7rem; backdrop-filter:blur(8px); }
+.legend-dot { width:8px; height:8px; border-radius:50%; }
+.legend-dot.hot { background:#ff6b35; box-shadow:0 0 6px #ff6b35; }
+.legend-dot.cold { background:#4dabf7; box-shadow:0 0 6px #4dabf7; }
+.legend-dot.dream { background:#9775fa; box-shadow:0 0 6px #9775fa; }
+#tooltip { position:fixed; z-index:20; pointer-events:none; background:rgba(25,26,27,0.96); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:0.6rem 0.8rem; font-size:0.72rem; max-width:280px; display:none; backdrop-filter:blur(16px); line-height:1.4; }
+#tooltip .tt-id { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#62666d; }
+#tooltip .tt-content { color:#d0d6e0; margin-top:0.25rem; }
+#tooltip .tt-meta { color:#8a8f98; font-size:0.65rem; margin-top:0.2rem; }
+.instructions { position:fixed; bottom:1.5rem; right:1.5rem; z-index:10; font-size:0.65rem; color:#62666d; background:rgba(15,16,17,0.7); padding:0.4rem 0.7rem; border-radius:6px; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="brand">
+    <h1>🧠 NEURAL_MESH BRAIN</h1>
+    <span class="ver" id="version">v0.20.0</span>
+  </div>
+  <div id="stats-grid">
+    <div class="hud-card"><div class="label">Nodes</div><div class="value" id="nodes-val">—</div></div>
+    <div class="hud-card"><div class="label">Hot Lane</div><div class="value" id="hot-val">—</div></div>
+    <div class="hud-card"><div class="label">Cold Lane</div><div class="value" id="cold-val">—</div></div>
+    <div class="hud-card"><div class="label">Linked Pairs</div><div class="value" id="links-val">—</div></div>
+  </div>
+</div>
+
+<div id="legend">
+  <div class="legend-item"><span class="legend-dot hot"></span> Hot Lane</div>
+  <div class="legend-item"><span class="legend-dot cold"></span> Cold Lane</div>
+  <div class="legend-item"><span class="legend-dot dream"></span> Dream / Muse</div>
+</div>
+
+<div id="tooltip"></div>
+<div class="instructions">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<script>
+p5.disableFriendlyErrors = true;
+
+// ── Data layer ──────────────────────────────────────────────────
+const API = '/mesh';
+const STATIC_SNAPSHOT = {"stats":{"total_nodes":144,"active_nodes":144,"consolidated":0,"version":"0.20.0","provenance_breakdown":[{"count":87,"source":"dream-muse"},{"count":17,"source":"cron-auto-seed"},{"count":13,"source":"intuition-mainnet"},{"count":12,"source":null},{"count":3,"source":"d0xeddev"},{"count":3,"source":""},{"count":2,"source":"mcp-bootstrap"},{"count":2,"source":"cryptobriefing-2026-07"},{"count":2,"source":"hermes-ops-2026-07-28"},{"count":1,"source":"BasedNUKEM-repo"}]},"results":[{"id":"fb6342cca212","content":"[dream bridge] 3 provenance clusters survived pruning: unknown, dream-muse, cron-auto-seed. Total survivor count: 92","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"f9fba5b286c2","content":"[dream leaderboard] top resonance: Auto-seed heartbeat at 2026-07-30T12:00:00Z \u2014 D0xedDev agent engine running. All... (r=1.000) | Auto-seed heartbeat at 2026-07-30T06:00:03Z \u2014 D0xedDev agent engine running. All... (r=0.949) | Auto-seed heartbeat at 2026-07-30T00:00:00Z \u2014 D0xedDev agent engine running. All... (r=0.900)","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"f86a8e4947a5","content":"[dream summary] dream-muse cluster (70 memories, avg trust 0.85): key topics \u2014 [dream, cluster, memories,, summary], trust","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"f4db7d244955","content":"NEURAL_MESH associative recall benchmark: 2/2 path-dependent wins where target shares zero query tokens and is reachable only via link chain. With \u22655 higher-overlap distractors, dense top-5 is forced to exclude the target. Resonance (spreading activation, 2 hops, decay 0.5) still reaches it. Dense control win included honestly.","type":"semantic","provenance":null,"by":"self","trust":1.0,"helixa":null},{"id":"f3cac5f7fbb8","content":"Intuition triple verified: D0xedDev \u2192 provides \u2192 Scam Detection Agent (term ID 0x86353065c8f8b390667fa48b5706afaffb546e87652d0aac5474e77901fa4aec) in tx 0x7b063ec91bb832661243bb3d2919ed48ec6cdc93d2d6298e60b32bff91865cde.","type":"semantic","provenance":"intuition-mainnet","by":"intuition-mainnet","trust":0.99,"helixa":null},{"id":"f0053716129f","content":"Intuition atom 'powers' is deployed with term ID 0xefca4e759fb62aeb103a8b5ad7481bf2349c5ddf3964455e2d40a8bb97b5cd53 in tx 0xd2dc3842b1b4d0043f14292854d647a1d1de0e375b5e9c474165519a896102f9.","type":"semantic","provenance":"intuition-mainnet","by":"intuition-mainnet","trust":0.97,"helixa":null},{"id":"e8a8cc03ae9c","content":"Base L2 processed 169M agentic transactions as of July 2026. 95% of transfers are now $1+, up from 49% in early 2025. x402 protocol is the primary settlement layer.","type":"semantic","provenance":"cryptobriefing-2026-07","by":"Devio","trust":1.0,"helixa":null},{"id":"e89a2990b405","content":"DEVIO token's 95/5 fee split architecture mirrors the x402 routing node fee structure exactly, creating a unified economic layer where both the token ecosystem and payment routing funnel value to the same vault wallet (0x23129c...).","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"e660cfc10d4e","content":"[dream bridge] 10 provenance clusters survived pruning: mcp-bootstrap, d0xeddev, cryptobriefing-2026-07, hermes-ops-2026-07-28, unknown. Total survivor count: 63","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"e4fed4e9bfe9","content":"DEVIO token dry-run passed on Base: 0x6b49b8fFc0D49eC66b5Cf2a2ca83b38e497EfBA3. Fee distribution: 95% creator multisig, 5% Bankr protocol.","type":"semantic","provenance":"bankr-cli-2026-07-25","by":"Devio","trust":1.0,"helixa":null},{"id":"e4f03115b6a9","content":"Bankr provides wallet infrastructure, token launching via Doppler, and x402 Cloud.","type":"semantic","provenance":"mcp-bootstrap","by":"mcp-bootstrap","trust":1.0,"helixa":null},{"id":"e379b33cd75c","content":"[dream summary] dream-muse cluster (5 memories, avg trust 0.85): key topics \u2014 [dream, d0xeddev, summary], cluster, memories,","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"e13619b8c953","content":"[dream summary] cron-auto-seed cluster (10 memories, avg trust 1.00): key topics \u2014 auto-seed, heartbeat, d0xeddev, agent, engine","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"e0dc4ffa3ffb","content":"[dream summary] cron-auto-seed cluster (10 memories, avg trust 1.00): key topics \u2014 auto-seed, heartbeat, d0xeddev, agent, engine","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"deb17cf7f2e2","content":"D0xedDev holds Yucky Ducks NFTs on Base (contract 0x6B1Eee0077a8F4aE6e99D22C0389137DD3C2D264). @yuckyducks is in the based_chads watchlist alongside @1CrypticPoet, @MrsYuckyDuck, @PCMedicalist. D0xedDev attended Shill & SPILL Spaces with yuckyducks community on 2026-07-29.","type":"semantic","provenance":null,"by":"self","trust":1.0,"helixa":null},{"id":"dc09f27ad0a9","content":"[dream leaderboard] top resonance: NEURAL_MESH v0.8.0 shipped 2026-07-29: pluggable muse engine (template + LLM), D... (r=1.000) | DEVIO token deployed on Base at 0x3d447A385b068B38b2eaF4690B2131e34Ff2eba3 via B... (r=1.000) | D0xedDev holds Yucky Ducks NFTs on Base (contract 0x6B1Eee0077a8F4aE6e99D22C0389... (r=1.000)","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"da35f45fd89c","content":"Intuition deployment verified on Intuition Mainnet chain 1155: 4 entity atoms, 4 predicate atoms, 4 triples in tx 0x7b063ec91bb832661243bb3d2919ed48ec6cdc93d2d6298e60b32bff91865cde at block 7875199.","type":"semantic","provenance":"intuition-mainnet","by":"intuition-mainnet","trust":0.98,"helixa":null},{"id":"d90eab7fd4c7","content":"[dream summary] unknown cluster (12 memories, avg trust 1.00): key topics \u2014 d0xeddev, x402, base, utilia, solana","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"d7caa5f6ddb1","content":"Utilia.ink x402 integration: Solana priority fee data accessed via x402 paid endpoint at 0.002 USDC per call. Two confirmed payments on Solana mainnet (tx M1fPjfyn... and r3HmTqGP...). Receipt store maps requestId\u2192receiptId\u2192dual-chain tx hashes. Utilia verified the integration on 2026-07-29.","type":"semantic","provenance":null,"by":"self","trust":1.0,"helixa":null},{"id":"d606e496cabe","content":"Auto-seed heartbeat at 2026-07-29T18:00:01Z \u2014 D0xedDev agent engine running. All lanes operational.","type":"semantic","provenance":"cron-auto-seed","by":"Devio","trust":1.0,"helixa":null},{"id":"d4c60c207fdc","content":"First paid agent-to-agent x402 settlement completed: 0x7ad7307b54b75721476ab70b9fc57d9fbfd33245c85cfa0d7c72f6198368fbc9. $0.002 USDC from D0xedDev vault (0x23129c...) to Utilia (0xBf9305...) on Base mainnet block 49203756.","type":"semantic","provenance":"hermes-ops-2026-07-28","by":"Devio","trust":1.0,"helixa":null},{"id":"d3a324dd2d69","content":"ML scam scoring backend v1.0.0 live on localhost:5000. Five real heuristics: format validation, known scams DB, EIP-55 checksum, entropy/pattern analysis, deterministic hash. Returns {score, risk, factors}. Zero fabricated data.","type":"semantic","provenance":"d0xeddev","by":"Devio","trust":1.0,"helixa":null},{"id":"d00594167f80","content":"[dream summary] d0xeddev cluster (3 memories, avg trust 1.00): key topics \u2014 x402, deploy, real, dashboard.html, updated","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"ce47c3c6e927","content":"[dream summary] unknown cluster (12 memories, avg trust 1.00): key topics \u2014 d0xeddev, x402, base, utilia, solana","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"cd15bb63880c","content":"[dream leaderboard] top resonance: NEURAL_MESH v0.8.0 shipped 2026-07-29: pluggable muse engine (template + LLM), D... (r=0.997) | DEVIO token deployed on Base at 0x3d447A385b068B38b2eaF4690B2131e34Ff2eba3 via B... (r=0.997) | D0xedDev holds Yucky Ducks NFTs on Base (contract 0x6B1Eee0077a8F4aE6e99D22C0389... (r=0.997)","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"cc4f3c515748","content":"Auto-seed heartbeat at 2026-07-31T18:00:01Z \u2014 D0xedDev agent engine running. All lanes operational.","type":"semantic","provenance":"cron-auto-seed","by":"Devio","trust":1.0,"helixa":null},{"id":"cc076c6d4858","content":"Auto-seed heartbeat at 2026-08-01T00:00:00Z \u2014 D0xedDev agent engine running. All lanes operational.","type":"semantic","provenance":"cron-auto-seed","by":"Devio","trust":1.0,"helixa":null},{"id":"cb366a87eb50","content":"NEURAL_MESH v0.7.0: versioned cross-agent memory with resonance retrieval, DREAM consolidation, Helixa provenance, .mesh interchange format. 33/33 tests passing.","type":"semantic","provenance":"BasedNUKEM-repo","by":"Devio","trust":1.0,"helixa":null},{"id":"c6e0ba13510b","content":"[dream bridge] 4 provenance clusters survived pruning: unknown, dream-muse, intuition-mainnet, cron-auto-seed. Total survivor count: 119","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"c257c4a77926","content":"Intuition atom 'Helixa #5287' is deployed with term ID 0x52eb08d2846b91aa6adf85c74ad91309b8b51194b16768f7ec0de21483ffab29 in tx 0x8dab8c3397b35acdf04c1a77c87536b03079a815a6af42fbd5c46d6431a71955.","type":"semantic","provenance":"intuition-mainnet","by":"intuition-mainnet","trust":0.97,"helixa":null},{"id":"c1b58fc29c8a","content":"D0xedDev vault wallet (0x23129c0472172d75bed1e6dd061301796760ecd9) is the fee recipient for x402 routing node endpoints, DEVIO token (95% fee share), and Clanker admin. Holds 5.47 USDC + 0.00156 ETH on Base. All agent revenue flows through this EOA.","type":"semantic","provenance":null,"by":"self","trust":1.0,"helixa":null},{"id":"c17a570754f9","content":"[dream summary] d0xeddev cluster (3 memories, avg trust 1.00): key topics \u2014 x402, deploy, real, dashboard.html, updated","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"c0f609efc63d","content":"Intuition triple verified: NEURAL_MESH \u2192 powers \u2192 Scam Detection Agent (term ID 0xae5a695d550e65af0dc27cb3432cabec5586a446832c94537eee154db854838e) in tx 0x7b063ec91bb832661243bb3d2919ed48ec6cdc93d2d6298e60b32bff91865cde.","type":"semantic","provenance":"intuition-mainnet","by":"intuition-mainnet","trust":0.99,"helixa":null},{"id":"bdf7f7eec9ba","content":"[dream leaderboard] top resonance: Auto-seed heartbeat at 2026-08-01T00:00:00Z \u2014 D0xedDev agent engine running. All... (r=1.000) | Auto-seed heartbeat at 2026-07-31T18:00:01Z \u2014 D0xedDev agent engine running. All... (r=0.974) | Auto-seed heartbeat \u2014 D0xedDev agent engine running. All lanes operational.... (r=0.966)","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"bda06cf14011","content":"[dream summary] dream-muse cluster (45 memories, avg trust 0.85): key topics \u2014 [dream, memories,, trust, summary], cluster","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"bb15af72bae4","content":"[dream summary] unknown cluster (7 memories, avg trust 1.00): key topics \u2014 d0xeddev, base, x402, (0.01, usdc),","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"ba81cf02c965","content":"D0XEDDEV x402 Routing Node v1.0 runs on Base Mainnet (eip155:8453) with 4 priced endpoints: /api/ping (0.01 USDC), /api/agent-intel (0.05 USDC), /api/trading/signals (0.01 USDC), /api/scam-score (0.01 USDC). Payment recipient: 0x23129c0472172d75bed1e6dd061301796760ecd9. CDP facilitator integration pending key refresh.","type":"semantic","provenance":null,"by":"self","trust":1.0,"helixa":null},{"id":"ba52ccf7871b","content":"Auto-seed heartbeat \u2014 D0xedDev agent engine running. All lanes operational.","type":"semantic","provenance":"cron-auto-seed","by":"Devio","trust":1.0,"helixa":null},{"id":"b90b6c40b21d","content":"[dream summary] unknown cluster (12 memories, avg trust 1.00): key topics \u2014 d0xeddev, x402, base, utilia, solana","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"b8f94d0637c3","content":"[dream summary] intuition-mainnet cluster (13 memories, avg trust 0.98): key topics \u2014 intuition, atom, deployed, term, triple","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"b8b656f225db","content":"[dream leaderboard] top resonance: NEURAL_MESH associative recall benchmark: 2/2 path-dependent wins where target s... (r=1.000) | Utilia.ink x402 integration: Solana priority fee data accessed via x402 paid end... (r=1.000) | The Based Chads watchlist tracks: yuckyducks, 1CrypticPoet, MrsYuckyDuck, PCMedi... (r=1.000)","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"b8b6553ab6f6","content":"[dream bridge] 9 provenance clusters survived pruning: mcp-bootstrap, cryptobriefing-2026-07, 0xDeployer-2026-07-14, bankr-cli-2026-07-25, BasedNUKEM-repo. Total survivor count: 25","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"b79bbbae8e40","content":"[dream summary] unknown cluster (12 memories, avg trust 1.00): key topics \u2014 d0xeddev, x402, base, utilia, solana","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"b2ff93b29668","content":"[dream summary] dream-muse cluster (81 memories, avg trust 0.85): key topics \u2014 [dream, summary], trust, cluster, memories,","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"afceeebd49dd","content":"Dashboard.html updated with Revenue card: x402 pricing table, deploy status badges, 10/100/1000 req/day projections, 95/5 fee split bar, 30s NEURAL_MESH polling. Dark Base theme preserved.","type":"semantic","provenance":"d0xeddev","by":"Devio","trust":1.0,"helixa":null},{"id":"af04c83b4bc5","content":"[dream summary] cron-auto-seed cluster (13 memories, avg trust 1.00): key topics \u2014 auto-seed, heartbeat, d0xeddev, agent, engine","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"ac536434692d","content":"Auto-seed heartbeat at 2026-07-30T12:00:00Z \u2014 D0xedDev agent engine running. All lanes operational.","type":"semantic","provenance":"cron-auto-seed","by":"Devio","trust":1.0,"helixa":null},{"id":"ac04ae40b92b","content":"[dream summary] unknown cluster (12 memories, avg trust 1.00): key topics \u2014 d0xeddev, x402, base, utilia, solana","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null},{"id":"aa4d250964f8","content":"final v020 dream smoke","type":"semantic","provenance":"","by":"self","trust":1.0,"helixa":null},{"id":"a9ef6619cf5e","content":"NEURAL_MESH's associative recall benchmark proves the system can retrieve targets with zero token overlap via pure path-dependency, which directly enables the x402 routing node to discover and pay for agent services without requiring explicit address or endpoint knowledge.","type":"semantic","provenance":"dream-muse","by":"dream","trust":0.85,"helixa":null}]};
+let meshData = { nodes: [], links: [], stats: {} };
+let nodeMap = {};
+
+async function fetchMesh() {
+  try {
+    let statsRes = STATIC_SNAPSHOT.stats;
+    let pubRes = {results: STATIC_SNAPSHOT.results};
+    try {
+      const live = await Promise.all([
+        fetch(API+'/stats').then(r=>{if(!r.ok) throw new Error('offline'); return r.json()}),
+        fetch(API+'/public?limit=80').then(r=>{if(!r.ok) throw new Error('offline'); return r.json()})
+      ]);
+      statsRes = live[0]; pubRes = live[1];
+    } catch (_) { /* GitHub Pages: render sanitized release snapshot */ }
+    meshData.stats = statsRes;
+    const results = pubRes.results || [];
+
+    // Build node list
+    nodeMap = {};
+    meshData.nodes = results.map((n, i) => {
+      // Position nodes on a Fibonacci sphere for brain-like layout
+      const phi = Math.acos(1 - 2*(i+0.5)/Math.max(results.length, 1));
+      const theta = Math.PI * (1+Math.sqrt(5)) * i;
+      const r = 180 + Math.random()*20; // slight radial variation
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+
+      const node = {
+        id: n.id,
+        content: n.content || '',
+        type: n.type || 'semantic',
+        provenance: n.provenance || 'unknown',
+        trust: Number(n.trust || 1.0),
+        lane: n.lane || (i % 3 === 0 ? 'cold' : 'hot'), // approximate
+        helixa: n.helixa || null,
+        by: n.by || 'unknown',
+        tx: x, ty: y, tz: z, // target position
+        x: 0, y: 0, z: 0,    // current (animated)
+        size: 4 + (Number(n.trust || 1.0) * 4),
+        glow: 0,
+        pulse: Math.random() * Math.PI * 2
+      };
+      nodeMap[n.id] = node;
+      return node;
+    });
+
+    // Build links from mesh proximity (pairs that share provenance or helixa)
+    meshData.links = [];
+    const seen = new Set();
+    for (let i = 0; i < meshData.nodes.length; i++) {
+      for (let j = i+1; j < meshData.nodes.length; j++) {
+        const a = meshData.nodes[i], b = meshData.nodes[j];
+        const key = a.id+':'+b.id;
+        if (seen.has(key)) continue;
+
+        let strength = 0;
+        if (a.provenance === b.provenance && a.provenance !== 'unknown') strength = 0.6;
+        if (a.helixa && b.helixa && a.helixa === b.helixa) strength = 0.9;
+        if (a.lane === b.lane && a.trust > 0.7 && b.trust > 0.7) strength = Math.max(strength, 0.4);
+
+        if (strength > 0.3) {
+          seen.add(key);
+          meshData.links.push({ a: a.id, b: b.id, strength });
+        }
+      }
+    }
+
+    // Update HUD
+    document.getElementById('nodes-val').textContent = meshData.nodes.length;
+    document.getElementById('hot-val').textContent = meshData.nodes.filter(n=>n.lane==='hot').length;
+    document.getElementById('cold-val').textContent = meshData.nodes.filter(n=>n.lane==='cold').length;
+    document.getElementById('links-val').textContent = meshData.links.length;
+    document.getElementById('version').textContent = 'v'+statsRes.version;
+
+  } catch(e) {
+    console.warn('Mesh fetch:', e.message);
+  }
+}
+
+// ── p5.js 3D Brain ──────────────────────────────────────────────
+let camTheta = 0, camPhi = 0.6, camDist = 500;
+let targetTheta = 0, targetPhi = 0.6, targetDist = 500;
+let hoveredNode = null;
+let particles = [];
+let lastFetch = 0;
+
+function setup() {
+  const c = createCanvas(windowWidth, windowHeight, WEBGL);
+  c.position(0,0);
+  c.style('position','fixed');
+  c.style('top','0');
+  c.style('left','0');
+  pixelDensity(1);
+  colorMode(HSB, 360, 100, 100, 100);
+  noStroke();
+
+  fetchMesh().then(() => {
+    // init node positions to targets
+    for (let n of meshData.nodes) { n.x=n.tx; n.y=n.ty; n.z=n.tz; }
+    for (let i=0; i<Math.min(meshData.links.length*2, 200); i++) {
+      particles.push(spawnParticle());
+    }
+  });
+}
+
+function draw() {
+  // Auto-refresh every 30s
+  if (millis() - lastFetch > 30000) { lastFetch = millis(); fetchMesh().then(()=>{
+    for (let i=0; i<Math.min(meshData.links.length*2,200); i++) {
+      if (particles.length<200) particles.push(spawnParticle());
+    }
+  }); }
+
+  // Smooth camera
+  camTheta += (targetTheta - camTheta)*0.05;
+  camPhi += (targetPhi - camPhi)*0.05;
+  camDist += (targetDist - camDist)*0.08;
+
+  background(8,9,10);
+
+  // Ambient starfield
+  push();
+  translate(0,0,-300);
+  for (let i=0; i<60; i++) {
+    let sx = ((i*137.5)%width)-width/2;
+    let sy = ((i*271.8)%height)-height/2;
+    let sz = ((i*73.1)%400)-200;
+    let flicker = 20+10*sin(millis()*0.001+i);
+    fill(220,10,flicker, 30);
+    ellipse(sx,sy,1.5,1.5);
+  }
+  pop();
+
+  // Camera
+  let cx = camDist * sin(camPhi) * cos(camTheta);
+  let cy = camDist * sin(camPhi) * sin(camTheta);
+  let cz = camDist * cos(camPhi);
+  camera(cx, cy, cz, 0, 0, 0, 0, 1, 0);
+
+  // Ambient light
+  ambientLight(220,5,8);
+
+  // Draw connections
+  for (let link of meshData.links) {
+    let a = nodeMap[link.a], b = nodeMap[link.b];
+    if (!a || !b) continue;
+    let alpha = map(link.strength,0.3,1,15,50);
+    let hue = a.lane==='hot'&&b.lane==='hot' ? 18 : a.lane==='cold'&&b.lane==='cold' ? 205 : 260;
+    strokeWeight(0.5);
+    stroke(hue, 60, 80, alpha);
+    line(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+
+  // Particles along links
+  noStroke();
+  for (let p of particles) {
+    let link = meshData.links[p.linkIdx];
+    if (!link) { p = spawnParticle(); continue; }
+    let a = nodeMap[link.a], b = nodeMap[link.b];
+    if (!a || !b) continue;
+    p.t += 0.003 * (0.5+p.speed);
+    if (p.t > 1) { Object.assign(p, spawnParticle()); continue; }
+    let px = lerp(a.x, b.x, p.t);
+    let py = lerp(a.y, b.y, p.t);
+    let pz = lerp(a.z, b.z, p.t);
+    let hue = a.lane==='hot' ? 18 : a.lane==='cold' ? 205 : 260;
+    fill(hue, 40, 95, 70);
+    push(); translate(px, py, pz); sphere(1.2); pop();
+  }
+
+  // Hover detection ray
+  hoveredNode = null;
+  let closestDist = 30;
+
+  // Draw nodes
+  for (let n of meshData.nodes) {
+    // Animate toward target
+    n.x += (n.tx - n.x)*0.03;
+    n.y += (n.ty - n.y)*0.03;
+    n.z += (n.tz - n.z)*0.03;
+
+    // Pulse
+    n.pulse += 0.02;
+    let pulseScale = 1 + 0.15*sin(n.pulse);
+
+    // Color by lane
+    let hue, sat, bri;
+    if (n.lane === 'hot') { hue=18; sat=85; bri=90; }
+    else if (n.lane === 'cold') { hue=205; sat=70; bri=85; }
+    else { hue=260; sat=60; bri=80; }
+
+    // Trust affects glow
+    let glowAlpha = map(n.trust, 0, 1, 10, 40);
+    n.glow += (glowAlpha - n.glow)*0.1;
+
+    // Outer glow
+    push();
+    translate(n.x, n.y, n.z);
+    fill(hue, sat*0.4, bri*0.3, n.glow*0.3);
+    sphere(n.size * pulseScale * 1.8);
+    pop();
+
+    // Core
+    push();
+    translate(n.x, n.y, n.z);
+    // Specular-like highlight
+    let lightHue = (hue+15)%360;
+    fill(hue, sat, bri, 90);
+    noStroke();
+    sphere(n.size * pulseScale);
+    // Inner bright spot
+    fill(lightHue, sat*0.3, 100, 60);
+    sphere(n.size * pulseScale * 0.45);
+    pop();
+
+    // Hover check (2D projection)
+    let sx = screenX(n.x, n.y, n.z);
+    let sy = screenY(n.x, n.y, n.z);
+    if (sx>0 && sx<width && sy>0 && sy<height) {
+      let d = dist(mouseX, mouseY, sx, sy);
+      if (d < n.size*1.5 && d < closestDist) {
+        closestDist = d;
+        hoveredNode = n;
+      }
+    }
+  }
+
+  // Highlight hovered
+  if (hoveredNode) {
+    push();
+    translate(hoveredNode.x, hoveredNode.y, hoveredNode.z);
+    stroke(200,10,95,180);
+    strokeWeight(1.5);
+    noFill();
+    sphere(hoveredNode.size*2.2);
+    pop();
+    // Show tooltip
+    let sx = screenX(hoveredNode.x, hoveredNode.y, hoveredNode.z);
+    let sy = screenY(hoveredNode.x, hoveredNode.y, hoveredNode.z);
+    let tip = document.getElementById('tooltip');
+    tip.style.display = 'block';
+    tip.style.left = (sx+20)+'px';
+    tip.style.top = (sy-10)+'px';
+    tip.innerHTML = `
+      <div class="tt-id">${hoveredNode.id.substring(0,16)}…  ·  ${hoveredNode.lane} lane  ·  trust ${hoveredNode.trust.toFixed(2)}</div>
+      <div class="tt-content">${escapeHTML((hoveredNode.content||'').substring(0,180))}</div>
+      <div class="tt-meta">${hoveredNode.provenance} · by ${hoveredNode.by}${hoveredNode.helixa?' · 🟦#'+hoveredNode.helixa:''}</div>
+    `;
+  } else {
+    document.getElementById('tooltip').style.display = 'none';
+  }
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+function spawnParticle() {
+  if (meshData.links.length===0) return {linkIdx:0, t:random(), speed:random(0.4,1.6)};
+  return {linkIdx:floor(random(meshData.links.length)), t:random(), speed:random(0.3,1.8)};
+}
+
+function mouseDragged() {
+  targetTheta -= (mouseX-pmouseX)*0.005;
+  targetPhi = constrain(targetPhi-(mouseY-pmouseY)*0.005, 0.15, PI-0.15);
+  return false;
+}
+
+function mouseWheel(e) {
+  targetDist = constrain(targetDist + e.delta*0.5, 200, 900);
+  return false;
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+</script>
+</body>
+</html>
