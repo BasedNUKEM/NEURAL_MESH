@@ -61,7 +61,8 @@ class MemoryLifecycle:
         }
 
     def retrieve(self, query: str, *, mode: str = "fact", top_k: int = 5,
-                 alpha: float = 0.9, writeback: bool = True) -> dict:
+                 alpha: float = 0.9, writeback: bool = True,
+                 lane: "str | None" = None) -> dict:
         """Route direct fact lookup separately from associative exploration.
 
         ``fact`` uses dense-heavy hybrid retrieval, while ``associative`` uses
@@ -80,19 +81,24 @@ class MemoryLifecycle:
             raise ValueError(f"unknown retrieval mode: {mode}")
         if selected == "hybrid":
             hits = self.mesh.hybrid_recall(query, top_k=top_k, alpha=alpha,
-                                           writeback=writeback)
+                                           writeback=writeback, lane=lane)
         elif selected == "dense":
-            hits = self.mesh.dense_recall(query, top_k=top_k, writeback=writeback)
+            hits = self.mesh.dense_recall(query, top_k=top_k, writeback=writeback,
+                                          lane=lane)
         elif selected == "lexical":
-            hits = self.mesh.lexical_recall(query, top_k=top_k, writeback=writeback)
+            hits = self.mesh.lexical_recall(query, top_k=top_k, writeback=writeback,
+                                            lane=lane)
         else:
-            hits = self.mesh.recall(query, top_k=top_k, writeback=writeback)
+            hits = self.mesh.recall(query, top_k=top_k, writeback=writeback, lane=lane)
         return {"mode": selected, "hits": hits}
 
     def maintain(self, *, hot_ttl: float = 86_400.0,
                  cold_threshold: int = 3, prune_below: float = 0.05,
-                 max_age_days: float = 30.0, reflect_fn=None) -> dict:
-        """Run lane consolidation, then replay/strengthen/prune in that order."""
+                 max_age_days: float = 30.0, reflect_fn=None,
+                 mode: str = "sleep", muse_fn=None) -> dict:
+        """Consolidate lanes, then run lightweight SLEEP or enriched DREAM."""
+        if mode not in ("sleep", "dream"):
+            raise ValueError("maintenance mode must be 'sleep' or 'dream'")
         before = {n.id: n.lane for n in self.mesh._load().values()
                   if not n.superseded_by}
         self.mesh.consolidate(hot_ttl=hot_ttl, cold_threshold=cold_threshold)
@@ -100,14 +106,23 @@ class MemoryLifecycle:
                  if not n.superseded_by}
         promoted = sum(1 for nid, lane in before.items()
                        if lane == "hot" and after.get(nid) == "cold")
-        sleep_report = self.mesh.sleep(
-            prune_below=prune_below,
-            max_age_days=max_age_days,
-            reflect_fn=reflect_fn,
-        )
+        if mode == "dream":
+            from .dream import dream
+            cycle_report = dream(
+                self.mesh,
+                prune_below=prune_below,
+                max_age_days=max_age_days,
+                muse_fn=muse_fn,
+            )
+        else:
+            cycle_report = self.mesh.sleep(
+                prune_below=prune_below,
+                max_age_days=max_age_days,
+                reflect_fn=reflect_fn,
+            )
         return {
             "lanes": {"promoted": promoted},
-            "sleep": sleep_report,
+            mode: cycle_report,
             "stats": self.mesh.stats(),
         }
 
@@ -115,16 +130,21 @@ class MemoryLifecycle:
               top_k: int = 5, alpha: float = 0.9,
               hot_ttl: float = 86_400.0, cold_threshold: int = 3,
               prune_below: float = 0.05, max_age_days: float = 30.0,
-              reflect_fn=None, **ingest_options) -> dict:
+              reflect_fn=None, retrieval_lane: "str | None" = None,
+              maintenance_mode: str = "sleep", muse_fn=None,
+              **ingest_options) -> dict:
         """Execute the complete pointer → recall → lanes → sleep lifecycle."""
         ingest_report = self.ingest(payload, **ingest_options)
-        retrieval = self.retrieve(query, mode=mode, top_k=top_k, alpha=alpha)
+        retrieval = self.retrieve(query, mode=mode, top_k=top_k, alpha=alpha,
+                                  lane=retrieval_lane)
         maintenance = self.maintain(
             hot_ttl=hot_ttl,
             cold_threshold=cold_threshold,
             prune_below=prune_below,
             max_age_days=max_age_days,
             reflect_fn=reflect_fn,
+            mode=maintenance_mode,
+            muse_fn=muse_fn,
         )
         return {
             "ingest": ingest_report,

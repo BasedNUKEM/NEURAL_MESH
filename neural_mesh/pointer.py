@@ -27,10 +27,24 @@ class PointerStore:
         return ptr
 
     def resolve(self, ptr: str) -> str:
-        h = ptr.rsplit("/", 1)[-1]
-        path = os.path.join(self.root, h + ".json")
+        if not isinstance(ptr, str) or not ptr.startswith("mesh://"):
+            raise ValueError("invalid mesh pointer")
+        body = ptr[len("mesh://"):]
+        parts = body.split("/")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise ValueError("invalid mesh pointer")
+        h = parts[1]
+        if len(h) != 16 or any(c not in "0123456789abcdef" for c in h):
+            raise ValueError("invalid mesh pointer")
+        root = os.path.abspath(self.root)
+        path = os.path.abspath(os.path.join(root, h + ".json"))
+        if os.path.commonpath([root, path]) != root:
+            raise ValueError("invalid mesh pointer")
         with open(path) as f:
-            return json.load(f)["payload"]
+            record = json.load(f)
+        if record.get("ptr") != ptr:
+            raise ValueError("pointer metadata mismatch")
+        return record["payload"]
 
     def summarize(self, ptr: str, max_chars: int = 400) -> str:
         p = self.resolve(ptr)

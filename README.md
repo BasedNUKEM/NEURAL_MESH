@@ -127,7 +127,10 @@ The flow is **pointer-safe ingest → routed retrieval → hot/cold consolidatio
 sleep/replay/prune**. Payloads above the threshold stay outside model context;
 the mesh stores a searchable preview plus `mesh://…` pointer metadata. Use
 `mode="fact"` for direct lookup and `mode="associative"` when graph spreading is
-the desired behavior. The REST equivalent is `POST /mesh/cycle`.
+the desired behavior. The REST equivalent is `POST /mesh/cycle`. Every retrieval mode also accepts
+`lane="hot"`, `lane="cold"`, or `None` (all live lanes). Maintenance can run as
+lightweight `mode="sleep"` or enriched `mode="dream"`; both consolidate lanes
+first.
 
 ---
 
@@ -585,6 +588,23 @@ wrapper unless deployed behind a real production gateway.
 | `bench/` | Reproducible benchmarks (versioning, locomo, sharing, distill, tests) |
 
 ---
+
+### v0.20.0 — Lane-Aware Operations + Unified Maintenance (2026-08-01)
+
+🟦 All retrieval modes now accept `lane="hot"|"cold"|None`; resonance spreading
+is restricted to the selected subgraph so filtered recall cannot leak across lanes.
+
+🟦 Bulk ingestion now defaults to the hot lane, matching single-node ingestion.
+
+🟦 `MemoryLifecycle.maintain(mode="sleep"|"dream")` provides one lane-first
+orchestration contract while preserving both lightweight SLEEP and enriched DREAM.
+
+🟦 Added authenticated REST operations: `/mesh/sleep`, `/mesh/consolidate`,
+`/mesh/pointer`, and bounded `/mesh/pointer/summary`. Raw pointer resolution is
+intentionally not exposed over HTTP.
+
+🟦 Added CLI commands: `sleep`, `consolidate`, `pointer-put`, and
+`pointer-summary`; pointer primitives are now exported at package root.
 
 ### v0.19.0 — Integrated Memory Lifecycle (2026-08-01)
 

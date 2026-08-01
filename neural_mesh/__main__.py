@@ -102,6 +102,43 @@ def cmd_info(args):
     }, indent=2))
 
 
+def cmd_consolidate(args):
+    from neural_mesh import MemoryLifecycle, Mesh
+    lifecycle = MemoryLifecycle(Mesh(args.db or "mesh.db"))
+    report = lifecycle.maintain(
+        hot_ttl=args.hot_ttl,
+        cold_threshold=args.cold_threshold,
+        mode="sleep",
+        prune_below=-1.0,
+    )
+    print(json.dumps(report["lanes"], indent=2))
+
+
+def cmd_sleep(args):
+    from neural_mesh import Mesh
+    mesh = Mesh(args.db or "mesh.db")
+    print(json.dumps(mesh.sleep(
+        prune_below=args.prune_below,
+        max_age_days=args.max_age_days,
+    ), indent=2))
+
+
+def cmd_pointer_put(args):
+    from neural_mesh import PointerStore
+    with open(args.input) as f:
+        payload = f.read()
+    pointer = PointerStore(args.root).put(payload, args.label)
+    print(json.dumps({"pointer": pointer, "payload_chars": len(payload)}, indent=2))
+
+
+def cmd_pointer_summary(args):
+    from neural_mesh import PointerStore
+    if not args.pointer.startswith("mesh://"):
+        raise SystemExit("invalid mesh pointer")
+    summary = PointerStore(args.root).summarize(args.pointer, args.max_chars)
+    print(json.dumps({"pointer": args.pointer, "summary": summary}, indent=2))
+
+
 def cmd_rust_info(args):
     try:
         import rust_mesh
@@ -120,7 +157,7 @@ def cmd_rust_info(args):
 def main():
     p = argparse.ArgumentParser(
         prog="neural-mesh",
-        description="Self-organizing agentic memory mesh — v0.19.0")
+        description="Self-organizing agentic memory mesh — v0.20.0")
     sp = p.add_subparsers(dest="cmd")
 
     # export
@@ -151,6 +188,27 @@ def main():
     # info
     sp.add_parser("info", help="Mesh statistics").add_argument("--db", help="SQLite db path")
 
+    # operational maintenance
+    p_consolidate = sp.add_parser("consolidate", help="Promote durable hot memories")
+    p_consolidate.add_argument("--db", default="mesh.db")
+    p_consolidate.add_argument("--hot-ttl", type=float, default=86_400.0)
+    p_consolidate.add_argument("--cold-threshold", type=int, default=3)
+
+    p_sleep = sp.add_parser("sleep", help="Run replay/strengthen/prune")
+    p_sleep.add_argument("--db", default="mesh.db")
+    p_sleep.add_argument("--prune-below", type=float, default=0.05)
+    p_sleep.add_argument("--max-age-days", type=float, default=30.0)
+
+    p_ptr_put = sp.add_parser("pointer-put", help="Externalize a text file")
+    p_ptr_put.add_argument("input")
+    p_ptr_put.add_argument("--root", default=".mesh_pointers")
+    p_ptr_put.add_argument("--label", default="data")
+
+    p_ptr_summary = sp.add_parser("pointer-summary", help="Read a bounded pointer preview")
+    p_ptr_summary.add_argument("pointer")
+    p_ptr_summary.add_argument("--root", default=".mesh_pointers")
+    p_ptr_summary.add_argument("--max-chars", type=int, default=400)
+
     # rust-info
     sp.add_parser("rust-info", help="Rust accelerator status")
 
@@ -169,10 +227,18 @@ def main():
         cmd_benchmark(args)
     elif args.cmd == "info":
         cmd_info(args)
+    elif args.cmd == "consolidate":
+        cmd_consolidate(args)
+    elif args.cmd == "sleep":
+        cmd_sleep(args)
+    elif args.cmd == "pointer-put":
+        cmd_pointer_put(args)
+    elif args.cmd == "pointer-summary":
+        cmd_pointer_summary(args)
     elif args.cmd == "rust-info":
         cmd_rust_info(args)
     elif args.cmd == "version":
-        print("NEURAL_MESH v0.19.0")
+        print("NEURAL_MESH v0.20.0")
     else:
         p.print_help()
 

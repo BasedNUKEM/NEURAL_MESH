@@ -64,6 +64,27 @@ class TestMemoryLifecycle(unittest.TestCase):
         self.assertIn("pruned", report["sleep"])
         self.assertEqual(report["stats"]["cold"], 1)
 
+    def test_maintain_full_mode_runs_dream_after_lane_consolidation(self):
+        node = self.mesh.add("durable linked insight", lane="hot", trust=0.9)
+        node.created_at = time.time() - 10
+        node.access_count = 3
+        self.mesh._save(node)
+
+        report = self.life.maintain(
+            hot_ttl=1,
+            cold_threshold=2,
+            mode="dream",
+            muse_fn=lambda nodes: ["synthesized memory"],
+        )
+
+        self.assertEqual(report["lanes"]["promoted"], 1)
+        self.assertIn("drifted", report["dream"])
+        self.assertEqual(report["dream"]["insights"], ["synthesized memory"])
+
+    def test_maintain_rejects_unknown_mode(self):
+        with self.assertRaises(ValueError):
+            self.life.maintain(mode="nap")
+
     def test_cycle_returns_ingest_retrieval_and_maintenance_report(self):
         report = self.life.cycle(
             "release checklist deploy production",

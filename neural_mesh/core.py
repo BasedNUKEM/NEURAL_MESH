@@ -113,7 +113,7 @@ class Mesh:
         return node
 
     def add_many(self, contents: list[str], type: str = MemoryType.SEMANTIC,
-                 lane: str = "default", provenance: str = "", trust: float = 0.5,
+                 lane: str = "hot", provenance: str = "", trust: float = 0.5,
                  autolink: bool = True) -> list[MemoryNode]:
         """Bulk ingest. Embeds in batches (fast path for big corpora like
         LoCoMo) and links only if `autolink` is set. Returns saved nodes."""
@@ -184,13 +184,14 @@ class Mesh:
                 self._save(node)
 
     # ---------- retrieval ----------
-    def recall(self, query: str, top_k: int = 5, writeback: bool = False):
+    def recall(self, query: str, top_k: int = 5, writeback: bool = False,
+               lane: "str | None" = None):
         """Product-default retrieval: resonance-weighted spreading activation
         over the dense embedder. Skips superseded (stale) nodes. `writeback`
         defaults False (no disk write per query) — set True to track access
         stats for sleep()/consolidate()."""
         qe = self.embedder(query)
-        nodes = self._load()
+        nodes = {n.id: n for n in self._live_nodes(lane)}
         hits = _resonance_retrieve(nodes, qe, top_k=top_k)
         for n in hits:
             self._touch(n, writeback=writeback)
@@ -210,25 +211,30 @@ class Mesh:
             self._lex_cache[content] = cached
         return cached
 
-    def _live_nodes(self):
-        return [n for n in self._load().values() if not n.superseded_by]
+    def _live_nodes(self, lane: "str | None" = None):
+        if lane not in (None, "hot", "cold"):
+            raise ValueError("lane must be 'hot', 'cold', or None")
+        return [n for n in self._load().values()
+                if not n.superseded_by and (lane is None or n.lane == lane)]
 
-    def dense_recall(self, query: str, top_k: int = 5, writeback: bool = False):
+    def dense_recall(self, query: str, top_k: int = 5, writeback: bool = False,
+                     lane: "str | None" = None):
         """Pure cosine over stored (dense) embeddings — no resonance spread.
         Fair baseline for comparing against lexical/hybrid fusion."""
         qe = self.embedder(query)
-        scored = [(_sim(qe, n.embedding), n) for n in self._live_nodes()]
+        scored = [(_sim(qe, n.embedding), n) for n in self._live_nodes(lane)]
         scored.sort(key=lambda x: -x[0])
         hits = [n for _, n in scored[:top_k]]
         for n in hits:
             self._touch(n, writeback=writeback)
         return hits
 
-    def lexical_recall(self, query: str, top_k: int = 5, writeback: bool = False):
+    def lexical_recall(self, query: str, top_k: int = 5, writeback: bool = False,
+                       lane: "str | None" = None):
         """Pure lexical (hashed) cosine — exact-keyword retrieval. Catches
         matches the dense embedder paraphrases away."""
         ql = self._lex_emb(query)
-        scored = [(_sim(ql, self._lex_emb(n.content)), n) for n in self._live_nodes()]
+        scored = [(_sim(ql, self._lex_emb(n.content)), n) for n in self._live_nodes(lane)]
         scored.sort(key=lambda x: -x[0])
         hits = [n for _, n in scored[:top_k]]
         for n in hits:
@@ -236,7 +242,7 @@ class Mesh:
         return hits
 
     def hybrid_recall(self, query: str, top_k: int = 5, alpha: float = 0.5,
-                      writeback: bool = False):
+                      writeback: bool = False, lane: "str | None" = None):
         """Fuse dense (self.embedder) + lexical (hashed) similarity.
 
         combined = alpha * dense_cosine + (1 - alpha) * lexical_cosine
@@ -247,7 +253,7 @@ class Mesh:
         qe = self.embedder(query)
         ql = self._lex_emb(query)
         scored = []
-        for n in self._live_nodes():
+        for n in self._live_nodes(lane):
             d = _sim(qe, n.embedding)
             lx = _sim(ql, self._lex_emb(n.content))
             scored.append((alpha * d + (1.0 - alpha) * lx, n))

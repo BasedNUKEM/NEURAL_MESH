@@ -28,7 +28,10 @@ RATE_LIMITER = RateLimiter(
     limit=int(os.environ.get("NEURAL_MESH_RATE_LIMIT", "120")),
     window_seconds=int(os.environ.get("NEURAL_MESH_RATE_WINDOW", "60")),
 )
-AUTH_ENDPOINTS = {"add", "memory_cycle", "dream", "export_mesh", "merge", "stamp", "intuition_ingest_receipts"}
+AUTH_ENDPOINTS = {"add", "memory_cycle", "sleep_mesh", "consolidate_mesh",
+                  "pointer_put", "pointer_summary", "dream", "export_mesh",
+                  "merge", "stamp", "intuition_ingest_receipts", "eval_qa",
+                  "yantrikdb_ingest", "yantrikdb_think", "helixa_attest_node"}
 POLICY_FIELDS = {"trust", "cap_trust", "allow_new", "allow_merge"}
 
 
@@ -84,7 +87,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.19.0",
+        "version": "0.20.0",
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -118,20 +121,23 @@ def recall():
     limit = data.get("limit", 10)
 
     if mode == "dense":
-        nodes = mesh.dense_recall(data["query"], top_k=limit)
+        nodes = mesh.dense_recall(data["query"], top_k=limit, lane=data.get("lane"))
     elif mode == "lexical":
-        nodes = mesh.lexical_recall(data["query"], top_k=limit)
+        nodes = mesh.lexical_recall(data["query"], top_k=limit, lane=data.get("lane"))
     elif mode == "hybrid":
-        nodes = mesh.hybrid_recall(data["query"], top_k=limit, alpha=data.get("alpha", 0.9))
+        nodes = mesh.hybrid_recall(data["query"], top_k=limit, alpha=data.get("alpha", 0.9),
+                                   lane=data.get("lane"))
     else:
         nodes = mesh.recall(
             data["query"],
             top_k=limit,
+            lane=data.get("lane"),
         )
 
     return jsonify({
         "results": [
-            {"id": n.id, "content": n.content, "type": n.type.value, "trust": n.trust}
+            {"id": n.id, "content": n.content, "type": n.type.value,
+             "lane": n.lane, "trust": n.trust}
             for n in nodes
         ]
     })
@@ -165,6 +171,8 @@ def memory_cycle():
             cold_threshold=int(data.get("cold_threshold", 3)),
             prune_below=float(data.get("prune_below", 0.05)),
             max_age_days=float(data.get("max_age_days", 30.0)),
+            retrieval_lane=data.get("retrieval_lane"),
+            maintenance_mode=data.get("maintenance_mode", "sleep"),
         )
     except (TypeError, ValueError) as exc:
         return _json_error(str(exc), 400)
@@ -175,6 +183,61 @@ def memory_cycle():
         for n in hits
     ]
     return jsonify(report)
+
+
+@app.route("/mesh/consolidate", methods=["POST"])
+def consolidate_mesh():
+    """Promote durable hot memories into the cold lane."""
+    data = request.get_json() or {}
+    try:
+        hot_ttl = float(data.get("hot_ttl", 86_400.0))
+        cold_threshold = int(data.get("cold_threshold", 3))
+    except (TypeError, ValueError) as exc:
+        return _json_error(str(exc), 400)
+    before = {n.id: n.lane for n in mesh._load().values() if not n.superseded_by}
+    mesh.consolidate(hot_ttl=hot_ttl, cold_threshold=cold_threshold)
+    after = {n.id: n.lane for n in mesh._load().values() if not n.superseded_by}
+    promoted = sum(1 for nid, lane in before.items()
+                   if lane == "hot" and after.get(nid) == "cold")
+    return jsonify({"promoted": promoted, "stats": mesh.stats()})
+
+
+@app.route("/mesh/sleep", methods=["POST"])
+def sleep_mesh():
+    """Run the lightweight replay/strengthen/prune sleep pass."""
+    data = request.get_json() or {}
+    try:
+        prune_below = float(data.get("prune_below", 0.05))
+        max_age_days = float(data.get("max_age_days", 30.0))
+    except (TypeError, ValueError) as exc:
+        return _json_error(str(exc), 400)
+    return jsonify(mesh.sleep(prune_below=prune_below, max_age_days=max_age_days))
+
+
+@app.route("/mesh/pointer", methods=["POST"])
+def pointer_put():
+    """Externalize a payload. Returns metadata and pointer, never the payload."""
+    data = request.get_json() or {}
+    payload = data.get("payload")
+    if not isinstance(payload, str):
+        return _json_error("payload must be a string", 400)
+    pointer = lifecycle.pointers.put(payload, data.get("label", "data"))
+    return jsonify({"pointer": pointer, "payload_chars": len(payload)})
+
+
+@app.route("/mesh/pointer/summary", methods=["POST"])
+def pointer_summary():
+    """Return a bounded preview for a pointer; raw resolution is not exposed."""
+    data = request.get_json() or {}
+    pointer = data.get("pointer", "")
+    if not isinstance(pointer, str) or not pointer.startswith("mesh://"):
+        return _json_error("invalid mesh pointer", 400)
+    try:
+        max_chars = max(32, min(int(data.get("max_chars", 400)), 4_000))
+        summary = lifecycle.pointers.summarize(pointer, max_chars=max_chars)
+    except (OSError, ValueError, KeyError):
+        return _json_error("pointer not found", 404)
+    return jsonify({"pointer": pointer, "summary": summary})
 
 # ─── DREAM ─────────────────────────────────────────────────────────────────
 
@@ -206,11 +269,27 @@ def dream():
         except Exception as e:
             print(f"[WARN] LLM muse init failed: {e} — falling back to template", flush=True)
 
-    from neural_mesh.dream import dream as run_dream
-    report = run_dream(mesh, muse_fn=muse_fn)
+    try:
+        hot_ttl = float(data.get("hot_ttl", 86_400.0))
+        cold_threshold = int(data.get("cold_threshold", 3))
+        prune_below = float(data.get("prune_below", 0.04))
+        max_age_days = float(data.get("max_age_days", 30.0))
+    except (TypeError, ValueError) as exc:
+        return _json_error(str(exc), 400)
+    report = lifecycle.maintain(
+        hot_ttl=hot_ttl,
+        cold_threshold=cold_threshold,
+        prune_below=prune_below,
+        max_age_days=max_age_days,
+        mode="dream",
+        muse_fn=muse_fn,
+    )
+    dream_report = report["dream"]
+    dream_report["lanes"] = report["lanes"]
+    dream_report["stats"] = report["stats"]
     if muse_mode == "llm" and muse_fn is None:
-        report["muse_fallback"] = "template (LLM unavailable)"
-    return jsonify(report)
+        dream_report["muse_fallback"] = "template (LLM unavailable)"
+    return jsonify(dream_report)
 
 # ─── Sharing ───────────────────────────────────────────────────────────────
 
@@ -326,7 +405,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.19.0",
+        "version": "0.20.0",
         "provenance_breakdown": provenance_breakdown,
     })
 

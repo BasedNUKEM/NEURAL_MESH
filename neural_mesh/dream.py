@@ -119,7 +119,8 @@ def dream(mesh, decay: float = 0.9, reinforce_k: int = 3, min_link: float = 0.05
 
 
 def recall_associative(mesh, query: str, top_k: int = 5, hops: int = 2,
-                       seed_k: int = 6, decay: float = 0.5) -> list:
+                       seed_k: int = 6, decay: float = 0.5,
+                       lane: "str | None" = None) -> list:
     """Multi-hop associative recall.
 
     Unlike flat dense (which only returns nodes literally similar to the query),
@@ -132,10 +133,13 @@ def recall_associative(mesh, query: str, top_k: int = 5, hops: int = 2,
     show associative recall beating dense on path-reliant queries.
     """
     qe = mesh.embedder(query)
-    nodes = mesh._load()
+    if lane not in (None, "hot", "cold"):
+        raise ValueError("lane must be 'hot', 'cold', or None")
+    nodes = {n.id: n for n in mesh._load().values()
+             if not n.superseded_by and (lane is None or n.lane == lane)}
     # seed
     seeds = sorted(
-        ((_cosine(qe, n.embedding), n) for n in nodes.values() if not n.superseded_by),
+        ((_cosine(qe, n.embedding), n) for n in nodes.values()),
         key=lambda x: -x[0],
     )
     score = {n.id: max(0.0, s) for s, n in seeds}

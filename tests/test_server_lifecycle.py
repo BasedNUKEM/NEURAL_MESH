@@ -34,6 +34,25 @@ class TestLifecycleEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         self.assertEqual(response.get_json()["type"], "procedural")
 
+    def test_cycle_endpoint_accepts_dream_maintenance(self):
+        response = self.client.post("/mesh/cycle", json={
+            "payload": "dream maintenance payload",
+            "query": "dream maintenance",
+            "maintenance_mode": "dream",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("dream", response.get_json()["maintenance"])
+
+    def test_recall_endpoint_filters_lane(self):
+        server.mesh.add("hot deploy", lane="hot")
+        server.mesh.add("cold deploy", lane="cold")
+        response = self.client.post("/mesh/recall", json={
+            "query": "deploy", "mode": "hybrid", "lane": "cold",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({r["content"] for r in response.get_json()["results"]},
+                         {"cold deploy"})
+
     def test_cycle_endpoint_externalizes_and_serializes_hits(self):
         response = self.client.post("/mesh/cycle", json={
             "payload": "deploy trace " * 20,
