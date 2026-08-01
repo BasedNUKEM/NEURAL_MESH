@@ -8,7 +8,7 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#08090a; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
-canvas { display:block; position:fixed; top:0; left:0; z-index:1; }
+canvas { display:block; position:fixed; top:0; left:0; z-index:1; touch-action:none; }
 #hud { position:fixed; top:0; left:0; right:0; z-index:10; pointer-events:none; padding:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem; }
 #hud > * { pointer-events:auto; }
 .brand { display:flex; align-items:center; gap:0.6rem; }
@@ -30,6 +30,30 @@ canvas { display:block; position:fixed; top:0; left:0; z-index:1; }
 #tooltip .tt-content { color:#d0d6e0; margin-top:0.25rem; }
 #tooltip .tt-meta { color:#8a8f98; font-size:0.65rem; margin-top:0.2rem; }
 .instructions { position:fixed; bottom:1.5rem; right:1.5rem; z-index:10; font-size:0.65rem; color:#62666d; background:rgba(15,16,17,0.7); padding:0.4rem 0.7rem; border-radius:6px; }
+#mobile-detail { display:none; position:fixed; left:0.75rem; right:0.75rem; bottom:4rem; z-index:30; background:rgba(25,26,27,0.97); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:0.8rem 2.4rem 0.8rem 0.9rem; font-size:0.75rem; line-height:1.45; backdrop-filter:blur(16px); box-shadow:0 12px 36px rgba(0,0,0,0.45); }
+#mobile-detail.open { display:block; }
+#mobile-detail-close { position:absolute; top:0.45rem; right:0.55rem; width:32px; height:32px; border:1px solid rgba(255,255,255,0.1); border-radius:50%; background:rgba(255,255,255,0.04); color:#d0d6e0; font-size:1rem; }
+@media (max-width: 700px) {
+  #hud { padding:0.7rem; gap:0.55rem; }
+  .brand { width:100%; justify-content:space-between; }
+  .brand h1 { font-size:0.9rem; }
+  #stats-grid { width:100%; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.35rem; }
+  .hud-card { padding:0.5rem 0.35rem; border-radius:7px; text-align:center; }
+  .hud-card .label { font-size:0.48rem; white-space:nowrap; }
+  .hud-card .value { font-size:0.95rem; }
+  #legend { left:0.65rem; right:0.65rem; bottom:0.65rem; gap:0.3rem; justify-content:center; }
+  .legend-item { font-size:0.55rem; padding:0.3rem 0.45rem; }
+  .instructions { right:0.65rem; left:0.65rem; bottom:2.9rem; text-align:center; font-size:0.55rem; }
+  #tooltip { display:none !important; }
+}
+@media (max-height: 560px) and (orientation: landscape) {
+  #hud { padding:0.5rem; }
+  .brand h1 { font-size:0.8rem; }
+  #stats-grid { margin-left:auto; width:auto; display:flex; }
+  .hud-card { min-width:62px; padding:0.35rem; }
+  #legend { bottom:0.4rem; left:0.4rem; }
+  .instructions { display:none; }
+}
 </style>
 </head>
 <body>
@@ -54,7 +78,11 @@ canvas { display:block; position:fixed; top:0; left:0; z-index:1; }
 </div>
 
 <div id="tooltip"></div>
-<div class="instructions">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes</div>
+<div id="mobile-detail" role="dialog" aria-live="polite">
+  <button id="mobile-detail-close" aria-label="Close node details" onclick="closeMobileDetail()">×</button>
+  <div id="mobile-detail-body"></div>
+</div>
+<div class="instructions"><span class="desktop-help">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes</span><span class="mobile-help" style="display:none">☝ drag to orbit &nbsp;|&nbsp; pinch to zoom &nbsp;|&nbsp; tap nodes</span></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
 <script>
@@ -141,8 +169,12 @@ async function fetchMesh() {
 let camTheta = 0, camPhi = 0.6, camDist = 500;
 let targetTheta = 0, targetPhi = 0.6, targetDist = 500;
 let hoveredNode = null;
+let tappedNode = null;
 let particles = [];
 let lastFetch = 0;
+let lastTouchDistance = 0;
+let lastTouchX = 0, lastTouchY = 0, touchMovedFar = false;
+const isMobile = () => window.matchMedia('(max-width: 700px), (pointer: coarse)').matches;
 
 function setup() {
   const c = createCanvas(windowWidth, windowHeight, WEBGL);
@@ -153,6 +185,11 @@ function setup() {
   pixelDensity(1);
   colorMode(HSB, 360, 100, 100, 100);
   noStroke();
+  if (isMobile()) {
+    targetDist = windowWidth < 430 ? 630 : 560;
+    document.querySelector('.desktop-help').style.display = 'none';
+    document.querySelector('.mobile-help').style.display = 'inline';
+  }
 
   fetchMesh().then(() => {
     // init node positions to targets
@@ -286,7 +323,7 @@ function draw() {
   }
 
   // Highlight hovered
-  if (hoveredNode) {
+  if (hoveredNode && !isMobile()) {
     push();
     translate(hoveredNode.x, hoveredNode.y, hoveredNode.z);
     stroke(200,10,95,180);
@@ -324,6 +361,52 @@ function mouseDragged() {
   targetTheta -= (mouseX-pmouseX)*0.005;
   targetPhi = constrain(targetPhi-(mouseY-pmouseY)*0.005, 0.15, PI-0.15);
   return false;
+}
+
+function touchStarted() {
+  touchMovedFar = false;
+  if (touches.length === 1) {
+    lastTouchX = touches[0].x;
+    lastTouchY = touches[0].y;
+  } else if (touches.length === 2) {
+    lastTouchDistance = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+  }
+  return false;
+}
+
+function touchMoved() {
+  if (touches.length === 1) {
+    const dx = touches[0].x-lastTouchX, dy = touches[0].y-lastTouchY;
+    if (abs(dx)+abs(dy) > 3) touchMovedFar = true;
+    targetTheta -= dx * 0.007;
+    targetPhi = constrain(targetPhi - dy * 0.007, 0.15, PI-0.15);
+    lastTouchX = touches[0].x;
+    lastTouchY = touches[0].y;
+  } else if (touches.length === 2) {
+    touchMovedFar = true;
+    const current = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+    if (lastTouchDistance) targetDist = constrain(targetDist - (current-lastTouchDistance)*1.3, 220, 900);
+    lastTouchDistance = current;
+  }
+  return false;
+}
+
+function touchEnded() {
+  if (isMobile() && !touchMovedFar && hoveredNode) showMobileDetail(hoveredNode);
+  lastTouchDistance = 0;
+  return false;
+}
+
+function showMobileDetail(n) {
+  tappedNode = n;
+  const body = document.getElementById('mobile-detail-body');
+  body.innerHTML = `<div class="tt-id">${escapeHTML(n.id.substring(0,16))}… · ${escapeHTML(n.lane)} lane · trust ${n.trust.toFixed(2)}</div><div class="tt-content">${escapeHTML((n.content||'').substring(0,240))}</div><div class="tt-meta">${escapeHTML(n.provenance)} · by ${escapeHTML(n.by)}${n.helixa?' · 🟦#'+escapeHTML(n.helixa):''}</div>`;
+  document.getElementById('mobile-detail').classList.add('open');
+}
+
+function closeMobileDetail() {
+  tappedNode = null;
+  document.getElementById('mobile-detail').classList.remove('open');
 }
 
 function mouseWheel(e) {
