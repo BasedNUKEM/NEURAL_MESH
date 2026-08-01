@@ -97,6 +97,11 @@ def dashboard():
     """Serve the public mesh dashboard."""
     return send_from_directory("static", "dashboard.html")
 
+@app.route("/brain", methods=["GET"])
+def brain():
+    """Serve the 3D brain visualization."""
+    return send_from_directory("static", "brain.html")
+
 # ─── CRUD ──────────────────────────────────────────────────────────────────
 
 @app.route("/mesh/add", methods=["POST"])

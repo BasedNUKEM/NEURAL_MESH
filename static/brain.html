@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEURAL_MESH Brain — v0.20.0 — D0xedDev</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;510;590&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#08090a; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
+canvas { display:block; position:fixed; top:0; left:0; z-index:1; }
+#hud { position:fixed; top:0; left:0; right:0; z-index:10; pointer-events:none; padding:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem; }
+#hud > * { pointer-events:auto; }
+.brand { display:flex; align-items:center; gap:0.6rem; }
+.brand h1 { font-size:1.1rem; font-weight:590; color:#f7f8f8; letter-spacing:-0.02em; }
+.brand .ver { font-size:0.7rem; color:#8a8f98; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(255,255,255,0.04); padding:2px 8px; border-radius:4px; }
+.hud-card { background:rgba(15,16,17,0.92); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:0.8rem 1rem; backdrop-filter:blur(12px); }
+.hud-card .label { font-size:0.65rem; color:#62666d; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.2rem; }
+.hud-card .value { font-size:1.4rem; font-weight:590; color:#f7f8f8; }
+.hud-card .sub { font-size:0.7rem; color:#8a8f98; margin-top:0.15rem; }
+#stats-grid { display:flex; gap:0.6rem; flex-wrap:wrap; }
+#legend { position:fixed; bottom:1.5rem; left:1.5rem; z-index:10; display:flex; gap:1rem; flex-wrap:wrap; }
+.legend-item { display:flex; align-items:center; gap:0.4rem; font-size:0.7rem; color:#8a8f98; background:rgba(15,16,17,0.85); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:0.35rem 0.7rem; backdrop-filter:blur(8px); }
+.legend-dot { width:8px; height:8px; border-radius:50%; }
+.legend-dot.hot { background:#ff6b35; box-shadow:0 0 6px #ff6b35; }
+.legend-dot.cold { background:#4dabf7; box-shadow:0 0 6px #4dabf7; }
+.legend-dot.dream { background:#9775fa; box-shadow:0 0 6px #9775fa; }
+#tooltip { position:fixed; z-index:20; pointer-events:none; background:rgba(25,26,27,0.96); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:0.6rem 0.8rem; font-size:0.72rem; max-width:280px; display:none; backdrop-filter:blur(16px); line-height:1.4; }
+#tooltip .tt-id { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#62666d; }
+#tooltip .tt-content { color:#d0d6e0; margin-top:0.25rem; }
+#tooltip .tt-meta { color:#8a8f98; font-size:0.65rem; margin-top:0.2rem; }
+.instructions { position:fixed; bottom:1.5rem; right:1.5rem; z-index:10; font-size:0.65rem; color:#62666d; background:rgba(15,16,17,0.7); padding:0.4rem 0.7rem; border-radius:6px; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="brand">
+    <h1>🧠 NEURAL_MESH BRAIN</h1>
+    <span class="ver" id="version">v0.20.0</span>
+  </div>
+  <div id="stats-grid">
+    <div class="hud-card"><div class="label">Nodes</div><div class="value" id="nodes-val">—</div></div>
+    <div class="hud-card"><div class="label">Hot Lane</div><div class="value" id="hot-val">—</div></div>
+    <div class="hud-card"><div class="label">Cold Lane</div><div class="value" id="cold-val">—</div></div>
+    <div class="hud-card"><div class="label">Linked Pairs</div><div class="value" id="links-val">—</div></div>
+  </div>
+</div>
+
+<div id="legend">
+  <div class="legend-item"><span class="legend-dot hot"></span> Hot Lane</div>
+  <div class="legend-item"><span class="legend-dot cold"></span> Cold Lane</div>
+  <div class="legend-item"><span class="legend-dot dream"></span> Dream / Muse</div>
+</div>
+
+<div id="tooltip"></div>
+<div class="instructions">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<script>
+p5.disableFriendlyErrors = true;
+
+// ── Data layer ──────────────────────────────────────────────────
+const API = '/mesh';
+let meshData = { nodes: [], links: [], stats: {} };
+let nodeMap = {};
+
+async function fetchMesh() {
+  try {
+    const [statsRes, pubRes] = await Promise.all([
+      fetch(API+'/stats').then(r=>r.json()),
+      fetch(API+'/public?limit=80').then(r=>r.json())
+    ]);
+    meshData.stats = statsRes;
+    const results = pubRes.results || [];
+
+    // Build node list
+    nodeMap = {};
+    meshData.nodes = results.map((n, i) => {
+      // Position nodes on a Fibonacci sphere for brain-like layout
+      const phi = Math.acos(1 - 2*(i+0.5)/Math.max(results.length, 1));
+      const theta = Math.PI * (1+Math.sqrt(5)) * i;
+      const r = 180 + Math.random()*20; // slight radial variation
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+
+      const node = {
+        id: n.id,
+        content: n.content || '',
+        type: n.type || 'semantic',
+        provenance: n.provenance || 'unknown',
+        trust: Number(n.trust || 1.0),
+        lane: n.lane || (i % 3 === 0 ? 'cold' : 'hot'), // approximate
+        helixa: n.helixa || null,
+        by: n.by || 'unknown',
+        tx: x, ty: y, tz: z, // target position
+        x: 0, y: 0, z: 0,    // current (animated)
+        size: 4 + (Number(n.trust || 1.0) * 4),
+        glow: 0,
+        pulse: Math.random() * Math.PI * 2
+      };
+      nodeMap[n.id] = node;
+      return node;
+    });
+
+    // Build links from mesh proximity (pairs that share provenance or helixa)
+    meshData.links = [];
+    const seen = new Set();
+    for (let i = 0; i < meshData.nodes.length; i++) {
+      for (let j = i+1; j < meshData.nodes.length; j++) {
+        const a = meshData.nodes[i], b = meshData.nodes[j];
+        const key = a.id+':'+b.id;
+        if (seen.has(key)) continue;
+
+        let strength = 0;
+        if (a.provenance === b.provenance && a.provenance !== 'unknown') strength = 0.6;
+        if (a.helixa && b.helixa && a.helixa === b.helixa) strength = 0.9;
+        if (a.lane === b.lane && a.trust > 0.7 && b.trust > 0.7) strength = Math.max(strength, 0.4);
+
+        if (strength > 0.3) {
+          seen.add(key);
+          meshData.links.push({ a: a.id, b: b.id, strength });
+        }
+      }
+    }
+
+    // Update HUD
+    document.getElementById('nodes-val').textContent = meshData.nodes.length;
+    document.getElementById('hot-val').textContent = meshData.nodes.filter(n=>n.lane==='hot').length;
+    document.getElementById('cold-val').textContent = meshData.nodes.filter(n=>n.lane==='cold').length;
+    document.getElementById('links-val').textContent = meshData.links.length;
+    document.getElementById('version').textContent = 'v'+statsRes.version;
+
+  } catch(e) {
+    console.warn('Mesh fetch:', e.message);
+  }
+}
+
+// ── p5.js 3D Brain ──────────────────────────────────────────────
+let camTheta = 0, camPhi = 0.6, camDist = 500;
+let targetTheta = 0, targetPhi = 0.6, targetDist = 500;
+let hoveredNode = null;
+let particles = [];
+let lastFetch = 0;
+
+function setup() {
+  const c = createCanvas(windowWidth, windowHeight, WEBGL);
+  c.position(0,0);
+  c.style('position','fixed');
+  c.style('top','0');
+  c.style('left','0');
+  pixelDensity(1);
+  colorMode(HSB, 360, 100, 100, 100);
+  noStroke();
+
+  fetchMesh().then(() => {
+    // init node positions to targets
+    for (let n of meshData.nodes) { n.x=n.tx; n.y=n.ty; n.z=n.tz; }
+    for (let i=0; i<Math.min(meshData.links.length*2, 200); i++) {
+      particles.push(spawnParticle());
+    }
+  });
+}
+
+function draw() {
+  // Auto-refresh every 30s
+  if (millis() - lastFetch > 30000) { lastFetch = millis(); fetchMesh().then(()=>{
+    for (let i=0; i<Math.min(meshData.links.length*2,200); i++) {
+      if (particles.length<200) particles.push(spawnParticle());
+    }
+  }); }
+
+  // Smooth camera
+  camTheta += (targetTheta - camTheta)*0.05;
+  camPhi += (targetPhi - camPhi)*0.05;
+  camDist += (targetDist - camDist)*0.08;
+
+  background(8,9,10);
+
+  // Ambient starfield
+  push();
+  translate(0,0,-300);
+  for (let i=0; i<60; i++) {
+    let sx = ((i*137.5)%width)-width/2;
+    let sy = ((i*271.8)%height)-height/2;
+    let sz = ((i*73.1)%400)-200;
+    let flicker = 20+10*sin(millis()*0.001+i);
+    fill(220,10,flicker, 30);
+    ellipse(sx,sy,1.5,1.5);
+  }
+  pop();
+
+  // Camera
+  let cx = camDist * sin(camPhi) * cos(camTheta);
+  let cy = camDist * sin(camPhi) * sin(camTheta);
+  let cz = camDist * cos(camPhi);
+  camera(cx, cy, cz, 0, 0, 0, 0, 1, 0);
+
+  // Ambient light
+  ambientLight(220,5,8);
+
+  // Draw connections
+  for (let link of meshData.links) {
+    let a = nodeMap[link.a], b = nodeMap[link.b];
+    if (!a || !b) continue;
+    let alpha = map(link.strength,0.3,1,15,50);
+    let hue = a.lane==='hot'&&b.lane==='hot' ? 18 : a.lane==='cold'&&b.lane==='cold' ? 205 : 260;
+    strokeWeight(0.5);
+    stroke(hue, 60, 80, alpha);
+    line(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+
+  // Particles along links
+  noStroke();
+  for (let p of particles) {
+    let link = meshData.links[p.linkIdx];
+    if (!link) { p = spawnParticle(); continue; }
+    let a = nodeMap[link.a], b = nodeMap[link.b];
+    if (!a || !b) continue;
+    p.t += 0.003 * (0.5+p.speed);
+    if (p.t > 1) { Object.assign(p, spawnParticle()); continue; }
+    let px = lerp(a.x, b.x, p.t);
+    let py = lerp(a.y, b.y, p.t);
+    let pz = lerp(a.z, b.z, p.t);
+    let hue = a.lane==='hot' ? 18 : a.lane==='cold' ? 205 : 260;
+    fill(hue, 40, 95, 70);
+    push(); translate(px, py, pz); sphere(1.2); pop();
+  }
+
+  // Hover detection ray
+  hoveredNode = null;
+  let closestDist = 30;
+
+  // Draw nodes
+  for (let n of meshData.nodes) {
+    // Animate toward target
+    n.x += (n.tx - n.x)*0.03;
+    n.y += (n.ty - n.y)*0.03;
+    n.z += (n.tz - n.z)*0.03;
+
+    // Pulse
+    n.pulse += 0.02;
+    let pulseScale = 1 + 0.15*sin(n.pulse);
+
+    // Color by lane
+    let hue, sat, bri;
+    if (n.lane === 'hot') { hue=18; sat=85; bri=90; }
+    else if (n.lane === 'cold') { hue=205; sat=70; bri=85; }
+    else { hue=260; sat=60; bri=80; }
+
+    // Trust affects glow
+    let glowAlpha = map(n.trust, 0, 1, 10, 40);
+    n.glow += (glowAlpha - n.glow)*0.1;
+
+    // Outer glow
+    push();
+    translate(n.x, n.y, n.z);
+    fill(hue, sat*0.4, bri*0.3, n.glow*0.3);
+    sphere(n.size * pulseScale * 1.8);
+    pop();
+
+    // Core
+    push();
+    translate(n.x, n.y, n.z);
+    // Specular-like highlight
+    let lightHue = (hue+15)%360;
+    fill(hue, sat, bri, 90);
+    noStroke();
+    sphere(n.size * pulseScale);
+    // Inner bright spot
+    fill(lightHue, sat*0.3, 100, 60);
+    sphere(n.size * pulseScale * 0.45);
+    pop();
+
+    // Hover check (2D projection)
+    let sx = screenX(n.x, n.y, n.z);
+    let sy = screenY(n.x, n.y, n.z);
+    if (sx>0 && sx<width && sy>0 && sy<height) {
+      let d = dist(mouseX, mouseY, sx, sy);
+      if (d < n.size*1.5 && d < closestDist) {
+        closestDist = d;
+        hoveredNode = n;
+      }
+    }
+  }
+
+  // Highlight hovered
+  if (hoveredNode) {
+    push();
+    translate(hoveredNode.x, hoveredNode.y, hoveredNode.z);
+    stroke(200,10,95,180);
+    strokeWeight(1.5);
+    noFill();
+    sphere(hoveredNode.size*2.2);
+    pop();
+    // Show tooltip
+    let sx = screenX(hoveredNode.x, hoveredNode.y, hoveredNode.z);
+    let sy = screenY(hoveredNode.x, hoveredNode.y, hoveredNode.z);
+    let tip = document.getElementById('tooltip');
+    tip.style.display = 'block';
+    tip.style.left = (sx+20)+'px';
+    tip.style.top = (sy-10)+'px';
+    tip.innerHTML = `
+      <div class="tt-id">${hoveredNode.id.substring(0,16)}…  ·  ${hoveredNode.lane} lane  ·  trust ${hoveredNode.trust.toFixed(2)}</div>
+      <div class="tt-content">${escapeHTML((hoveredNode.content||'').substring(0,180))}</div>
+      <div class="tt-meta">${hoveredNode.provenance} · by ${hoveredNode.by}${hoveredNode.helixa?' · 🟦#'+hoveredNode.helixa:''}</div>
+    `;
+  } else {
+    document.getElementById('tooltip').style.display = 'none';
+  }
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+function spawnParticle() {
+  if (meshData.links.length===0) return {linkIdx:0, t:random(), speed:random(0.4,1.6)};
+  return {linkIdx:floor(random(meshData.links.length)), t:random(), speed:random(0.3,1.8)};
+}
+
+function mouseDragged() {
+  targetTheta -= (mouseX-pmouseX)*0.005;
+  targetPhi = constrain(targetPhi-(mouseY-pmouseY)*0.005, 0.15, PI-0.15);
+  return false;
+}
+
+function mouseWheel(e) {
+  targetDist = constrain(targetDist + e.delta*0.5, 200, 900);
+  return false;
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+</script>
+</body>
+</html>
