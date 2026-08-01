@@ -15,3 +15,6 @@ intuition-client/*sign*.mjs
 intuition-client/*deploy*.mjs
 intuition-client/*triple*.mjs
 intuition-client/verify-key.mjs
+
+# Large media exports (FLUX video, renders)
+media/
