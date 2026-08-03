@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 360" width="860" height="360" role="img" aria-label="NEURAL_MESH headline benchmarks: versioning current-truth and Rust acceleration">
+  <defs>
+    <linearGradient id="barFlat" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f87171"/><stop offset="1" stop-color="#991b1b"/>
+    </linearGradient>
+    <linearGradient id="barMesh" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#15803d"/>
+    </linearGradient>
+    <linearGradient id="barPy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#92400e"/>
+    </linearGradient>
+    <linearGradient id="barRs" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="860" height="360" fill="#070b12"/>
+
+  <!-- panel A: versioning -->
+  <g font-family="'DejaVu Sans Mono',Menlo,Consolas,monospace">
+    <text x="40" y="42" font-size="16" font-weight="bold" fill="#e2e8f0">CURRENT TRUTH — TOP-1 (UPDATE-HEAVY CORPUS)</text>
+    <text x="40" y="64" font-size="11" fill="#64748b">12 writes · 6 updates · 6 questions about the CURRENT value</text>
+
+    <text x="40" y="100" font-size="12" fill="#94a3b8">FLAT VECTOR SEARCH</text>
+    <rect x="40" y="110" width="17" height="60" fill="url(#barFlat)">
+      <animate attributeName="width" from="0" to="17" dur="1.2s" begin="0.3s" fill="freeze"/>
+    </rect>
+    <text x="68" y="150" font-size="14" fill="#fca5a5">16.7%</text>
+    <text x="130" y="150" font-size="11" fill="#475569">stale truth 17/6 queries leaked</text>
+
+    <text x="40" y="210" font-size="12" fill="#94a3b8">NEURAL_MESH (supersedes + skip)</text>
+    <rect x="40" y="220" width="102" height="60" fill="url(#barMesh)">
+      <animate attributeName="width" from="0" to="102" dur="1.2s" begin="0.6s" fill="freeze"/>
+    </rect>
+    <text x="152" y="260" font-size="14" fill="#86efac">100%</text>
+    <text x="216" y="260" font-size="11" fill="#475569">zero stale leaks</text>
+
+    <text x="40" y="318" font-size="12" fill="#fbbf24">6× precision gap on the failure that silently breaks agents</text>
+  </g>
+
+  <!-- divider -->
+  <line x1="430" y1="30" x2="430" y2="330" stroke="#1e293b" stroke-width="2"/>
+
+  <!-- panel B: rust -->
+  <g font-family="'DejaVu Sans Mono',Menlo,Consolas,monospace">
+    <text x="460" y="42" font-size="16" font-weight="bold" fill="#e2e8f0">RESONANCE RETRIEVAL — RUST HOT PATH</text>
+    <text x="460" y="64" font-size="11" fill="#64748b">5,000 nodes · 20,000 edges · 256 dims · median of 7 runs</text>
+
+    <text x="460" y="100" font-size="12" fill="#94a3b8">PYTHON BACKEND</text>
+    <rect x="460" y="110" width="108" height="60" fill="url(#barPy)">
+      <animate attributeName="width" from="0" to="108" dur="1.2s" begin="0.3s" fill="freeze"/>
+    </rect>
+    <text x="578" y="150" font-size="14" fill="#fcd34d">107.9 ms</text>
+
+    <text x="460" y="210" font-size="12" fill="#94a3b8">RUST BACKEND (pyo3/abi3)</text>
+    <rect x="460" y="220" width="66" height="60" fill="url(#barRs)">
+      <animate attributeName="width" from="0" to="66" dur="1.2s" begin="0.6s" fill="freeze"/>
+    </rect>
+    <text x="536" y="260" font-size="14" fill="#67e8f9">66.2 ms</text>
+
+    <text x="460" y="300" font-size="12" fill="#4ade80">1.63× FASTER · EXACT TOP-10 PARITY · AUTO-FALLBACK</text>
+    <text x="460" y="322" font-size="11" fill="#475569">one abi3 .so runs on any Python ≥ 3.9 — dev and prod</text>
+  </g>
+</svg>

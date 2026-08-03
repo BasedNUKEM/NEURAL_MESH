@@ -18,3 +18,7 @@ intuition-client/verify-key.mjs
 
 # Large media exports (FLUX video, renders)
 media/
+
+# Runtime dream-cycle artifacts
+dream_results/
+dream-consolidation-*.md

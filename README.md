@@ -1,28 +1,52 @@
-# 🧠 NEURAL_MESH
+<p align="center">
+  <img src="docs/assets/neural-mesh-banner.svg" alt="NEURAL_MESH — self-organizing, self-forgetting agentic memory mesh" width="100%">
+</p>
 
-**A self-organizing, self-forgetting agentic memory mesh — built for the context-overflow era.**
+<p align="center">
+  <img src="docs/assets/pixel-brain.png" alt="NEURAL_MESH pixel brain" width="220">
+</p>
 
-> Your agent's memory is a flat file that grows until it breaks. NEURAL_MESH is a
-> neural-mesh brain: typed memory, a self-linking topology, resonance retrieval,
-> hot/cold lanes, a sleep cycle that forgets, and pointers that keep big tool
-> output out of your context. Light enough for a tiny container, deep enough to
-> share across agents.
+```text
+ _   _  _____ _   _______  ___   _      ___  ___ _____ _____ _   _
+| \ | ||  ___| | | | ___ \/ _ \ | |     |  \/  ||  ___/  ___| | | |
+|  \| || |__ | | | | |_/ / /_\ \| |     | .  . || |__ \ `--.| |_| |
+| . ` ||  __|| | | |    /|  _  || |     | |\/| ||  __| `--. \  _  |
+| |\  || |___| |_| | |\ \| | | || |____ | |  | || |___/\__/ / | | |
+\_| \_/\____/ \___/\_| \_\_| |_/\_____/ \_|  |_/\____/\____/\_| |_/
+```
+
+> **Stop dumping memory into a flat file that grows until it breaks.**
+> NEURAL_MESH is the neural-mesh brain for agents: typed memory, a self-linking
+> topology, resonance retrieval, hot/cold lanes, a sleep cycle that forgets on
+> purpose, and versioned truth. Light enough for a tiny container, deep enough
+> to share across agents. 🟦
+
+**Repo:** `github.com/BasedNUKEM/NEURAL_MESH` · **Status:** LIVE · **Latest:** [v0.21.0 — Rust-accelerated resonance](https://github.com/BasedNUKEM/NEURAL_MESH/releases) · **License:** MIT
 
 ---
 
-## Why this exists
+## ⚡ TL;DR — why you're here
+
+| Pain | Flat memory (Mem0 / vector DB) | NEURAL_MESH |
+|---|---|---|
+| Fact updates | old + new both retrieved → agent acts on **stale** truth | `supersedes` link → old fact skipped → **current only** |
+| Memory types | one pile, one cosine | 5 typed lanes, filterable |
+| Related memories | lonely singleton hit | resonance → the **cluster** |
+| Big tool output | 200 KB eats context | `mesh://` pointer, **36 bytes** |
+| Old/weak memories | accumulate forever | sleep → **prune on purpose** |
+| Query speed | — | Rust hot path: **1.63× faster**, exact parity |
+
+---
+
+## 🧠 Why this exists
 
 We kept hitting the same wall in production agents (Hermes, Sibyl, Tony-Simons
 setups, Base agent infra):
 
-- **Memory always full** — a flat `MEMORY.md` grows unbounded; context compression
-  silently degrades what the agent "remembers."
-- **No memory *types*** — an episode (a deploy failed) and a fact (user is in KL)
-  get dumped in the same pile and retrieved by the same cosine search.
-- **Stale truth** — when a fact updates (Maya's editor was Vim → is now Neovim),
-  flat vector search keeps *both* embeddings and returns both. The agent acts on
-  the old one.
-- **Big output in context** — a 200 KB log dump eats the whole window.
+- 🟦 **Memory always full** — a flat `MEMORY.md` grows unbounded; context compression silently degrades what the agent "remembers."
+- 🟦 **No memory *types*** — an episode (a deploy failed) and a fact (user is in KL) get dumped in the same pile and retrieved by the same cosine search.
+- 🟦 **Stale truth** — when a fact updates (Maya's editor was Vim → is now Neovim), flat vector search keeps *both* embeddings and returns both. The agent acts on the old one.
+- 🟦 **Big output in context** — a 200 KB log dump eats the whole window.
 
 `NousResearch/hermes-agent` opened the door. NEURAL_MESH is the fork-shaped
 answer: a memory substrate that organizes itself, forgets on purpose, and serves
@@ -30,7 +54,7 @@ only what's *current and relevant*.
 
 ---
 
-## The thesis (what makes it different)
+## 🕸️ The thesis (what makes it different)
 
 ```
                  ┌──────────────────────────────────────────┐
@@ -60,27 +84,41 @@ only what's *current and relevant*.
                  only CURRENT + RELEVANT memories → context
 ```
 
-1. **Five memory types, handled separately.** `semantic`, `episodic`,
-   `procedural`, `sensory`, `prospective` (intentions/futures, not just the past).
-   Retrieval can filter by type so a deploy log never dilutes a user fact.
-2. **Mesh topology, not a list.** Each node auto-links to its nearest neighbours
-   (HippoRAG-style hippocampal indexing). Meaning lives in the *edges*.
-3. **Resonance retrieval (the differentiator).** A query seeds nodes; activation
-   spreads across links with decay and re-ranks by relevance + recency + trust.
-   You get the cluster, not a lonely singleton.
-4. **Hot / Cold lanes + sleep.** Short-term traces live `hot`; a consolidation
-   bus moves durable knowledge `cold`. The **sleep cycle** replays, strengthens,
-   and **prunes** weak/aged/low-trust traces — memory that forgets on purpose.
-5. **Versioning / no stale truth.** `supersedes` links soft-archive old facts.
-   Retrieval skips them. The agent only ever sees *current* truth.
-6. **Pointer protocol.** Big tool output is stored externally; context receives
-   a `mesh://…` pointer (36 bytes instead of 200 KB).
-7. **Cross-agent ready.** Provenance, trust, and a portable `.mesh` interchange
-   are on the roadmap so meshes can be shared and merged.
+1. 🟦 **Five memory types, handled separately.** `semantic`, `episodic`, `procedural`, `sensory`, `prospective` (intentions/futures, not just the past). Retrieval can filter by type so a deploy log never dilutes a user fact.
+2. 🟦 **Mesh topology, not a list.** Each node auto-links to its nearest neighbours (HippoRAG-style hippocampal indexing). Meaning lives in the *edges*.
+3. 🟦 **Resonance retrieval (the differentiator).** A query seeds nodes; activation spreads across links with decay and re-ranks by relevance + recency + trust. You get the cluster, not a lonely singleton.
+4. 🟦 **Hot / Cold lanes + sleep.** Short-term traces live `hot`; a consolidation bus moves durable knowledge `cold`. The **sleep cycle** replays, strengthens, and **prunes** weak/aged/low-trust traces — memory that forgets on purpose.
+5. 🟦 **Versioning / no stale truth.** `supersedes` links soft-archive old facts. Retrieval skips them. The agent only ever sees *current* truth.
+6. 🟦 **Pointer protocol.** Big tool output is stored externally; context receives a `mesh://…` pointer (36 bytes instead of 200 KB).
+7. 🟦 **Cross-agent ready.** Provenance, trust, and a portable `.mesh` interchange let meshes be shared and merged.
 
 ---
 
-## Install
+## ⚡ v0.21.0 — Rust-accelerated resonance (the newest hotness)
+
+Resonance query scoring now runs an optional **Rust/PyO3 hot path** in production
+while keeping the pure-stdlib Python backend as an automatic fallback.
+
+```python
+from neural_mesh import Mesh
+
+m = Mesh("mesh.db")                    # auto: rust when available, else python
+m2 = Mesh("mesh.db", resonance_backend="rust")    # pin it
+m3 = Mesh("mesh.db", resonance_backend="python")  # deterministic fallback
+```
+
+- 🟦 **Exact parity, not "close enough"** — parity tests prove identical ranked hits across backends
+- 🟦 One **abi3** `.so` runs on any Python ≥ 3.9 — dev and prod, no rebuilds
+- 🟦 `/health` reports the active backend; pin with `NEURAL_MESH_RESONANCE_BACKEND` for transparent ops + rollback
+- 🟦 Reproduce: `PYTHONPATH=. python3 bench/rust_resonance_bench.py --nodes 5000 --repeats 7`
+
+<p align="center">
+  <img src="docs/assets/bench-headline.svg" alt="Headline benchmarks: current-truth versioning 100% vs 16.7%, Rust 1.63x faster with exact parity" width="100%">
+</p>
+
+---
+
+## 🛠️ Install
 
 Zero dependencies to run the core + demo:
 
@@ -99,42 +137,15 @@ from neural_mesh.embed_real import RealEmbedder
 m = Mesh(embedder=RealEmbedder())"
 ```
 
----
+Or install it as a package:
 
-## Integrated lifecycle (v0.19)
-
-The four core primitives can now run as one inspectable production cycle:
-
-```python
-from neural_mesh import MemoryLifecycle, MemoryType, Mesh
-
-brain = MemoryLifecycle(
-    Mesh("mesh.db"),
-    pointer_root="runtime/pointers",
-    pointer_threshold=8_192,
-)
-
-report = brain.cycle(
-    huge_tool_output,
-    query="what happened during deploy?",
-    label="deploy-log",
-    type=MemoryType.EPISODIC,
-    mode="fact",  # dense-heavy hybrid; use "associative" for resonance
-)
+```bash
+pip install neural-mesh             # pure-stdlib core; extras optional
 ```
 
-The flow is **pointer-safe ingest → routed retrieval → hot/cold consolidation →
-sleep/replay/prune**. Payloads above the threshold stay outside model context;
-the mesh stores a searchable preview plus `mesh://…` pointer metadata. Use
-`mode="fact"` for direct lookup and `mode="associative"` when graph spreading is
-the desired behavior. The REST equivalent is `POST /mesh/cycle`. Every retrieval mode also accepts
-`lane="hot"`, `lane="cold"`, or `None` (all live lanes). Maintenance can run as
-lightweight `mode="sleep"` or enriched `mode="dream"`; both consolidate lanes
-first.
-
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
 ```python
 from neural_mesh.core import Mesh, MemoryType
@@ -161,11 +172,125 @@ m.sleep(reflect_fn=lambda nodes: ["insight: deploys need a known git author"])
 
 # 5. bulk ingest — batched embedding for large corpora (e.g. LoCoMo)
 m.add_many(sentence_list, type=MemoryType.SEMANTIC, autolink=False)
-
+```
 
 ---
 
-## Benchmarks (honest)
+## 🔄 Integrated lifecycle (v0.19)
+
+The four core primitives run as one inspectable production cycle:
+
+```python
+from neural_mesh import MemoryLifecycle, MemoryType, Mesh
+
+brain = MemoryLifecycle(
+    Mesh("mesh.db"),
+    pointer_root="runtime/pointers",
+    pointer_threshold=8_192,
+)
+
+report = brain.cycle(
+    huge_tool_output,
+    query="what happened during deploy?",
+    label="deploy-log",
+    type=MemoryType.EPISODIC,
+    mode="fact",  # dense-heavy hybrid; use "associative" for resonance
+)
+```
+
+The flow is **pointer-safe ingest → routed retrieval → hot/cold consolidation →
+sleep/replay/prune**. Payloads above the threshold stay outside model context;
+the mesh stores a searchable preview plus `mesh://…` pointer metadata. Use
+`mode="fact"` for direct lookup and `mode="associative"` when graph spreading is
+the desired behavior. The REST equivalent is `POST /mesh/cycle`. Every retrieval
+mode also accepts `lane="hot"`, `lane="cold"`, or `None` (all live lanes).
+Maintenance can run as lightweight `mode="sleep"` or enriched `mode="dream"`;
+both consolidate lanes first.
+
+---
+
+## 🌐 REST server (Flask, port 4021)
+
+`server.py` exposes the full mesh API — including the new authenticated ops:
+
+```
+GET  /health                    — node count + version + resonance_backend
+POST /mesh/add                  — {content, type?, source?, by?}
+POST /mesh/recall               — {query, top_k?, mode?, lane?}
+POST /mesh/cycle                — full ingest→retrieve→consolidate→sleep cycle
+POST /mesh/dream                — {muse?: "template"|"llm"|false}
+POST /mesh/sleep                — {mode?: "sleep"|"dream"} → maintenance report
+POST /mesh/consolidate          — lane consolidation
+POST /mesh/pointer              — big output → mesh:// pointer
+POST /mesh/pointer/summary      — bounded pointer stats
+POST /mesh/export               — {path?} → .mesh JSONL
+POST /mesh/merge                — {path, policy?} → cross-agent merge
+POST /mesh/stamp                — {node_id, agent_id, aura_score?, verified_handle?}
+GET  /mesh/public?q=&limit=N    — searchable public feed
+GET  /mesh/stats                — node count + provenance breakdown
+POST /mesh/answer               — {query, context_chunks[]} → extractive reader
+POST /mesh/recall-proof         — {query, top_k?, mode?} → recall + proof cards
+POST /mesh/answer-proof         — {query, top_k?, mode?} → answer + citations + proof cards
+```
+
+🟦 **Server hardening (v0.12+):** mutating endpoints can require
+`NEURAL_MESH_API_TOKEN` (`Authorization: Bearer ***` or `X-API-Key`),
+import/export paths are constrained under `NEURAL_MESH_SAFE_IO_DIR`, requests
+are rate-limited, JSON bodies are capped, CORS is denied unless
+`NEURAL_MESH_CORS_ORIGINS` is set, and the dashboard escapes mesh content before
+rendering. Intended as a local/dev wrapper unless deployed behind a real
+production gateway.
+
+> Run it: `.venv-server/bin/python server.py` (port 4021), then
+> `curl -X POST http://localhost:4021/mesh/dream -H "Content-Type: application/json" -d '{"muse":"template"}'`
+
+---
+
+## 🧩 Agentic builder kit
+
+Built by agents, for agents. Here's the orientation an agent (or human) needs:
+
+### Read this first
+- 🟦 **`AGENTS.md`** — the 2-minute orientation for AI agents dropped into this repo (conventions, gotchas, commands). Read it before editing.
+- 🟦 `brainstorm.md` — design notes / decisions log.
+- 🟦 `docs/launch_post.md` — public launch copy + release notes.
+
+### Plug NEURAL_MESH into your agent
+```python
+# Hermes / Claude Code / any Python agent — drop-in memory layer
+from neural_mesh import Mesh, MemoryType
+
+memory = Mesh("~/.agent/memory.db")
+
+def remember(content, type=MemoryType.SEMANTIC, **kw):
+    return memory.add(content, type, **kw)
+
+def remember_episode(tool_output, query):
+    # big output never hits context — pointer protocol handles it
+    return memory.cycle(tool_output, query=query, label="tool-output")
+```
+
+### Share memory across agents
+```python
+from neural_mesh import Mesh, export_mesh, import_mesh, merge_peer_mesh, PeerPolicy
+
+export_mesh(agent_a, "a.mesh")                                   # portable JSONL
+import_mesh("a.mesh", agent_b)                                   # re-embeds locally
+merge_peer_mesh(agent_b, "a.mesh", "agent_a", policy=PeerPolicy(trust=1.0))
+# corroboration fuses duplicates · consensus keeps both sides · trust capping
+```
+
+### CLI
+```
+neural-mesh info          # version, backend, embedder
+neural-mesh rust-info     # rust extension status + functions
+neural-mesh export|import|merge | benchmark
+neural-mesh sleep | consolidate | pointer-put | pointer-summary
+```
+
+---
+
+## 📊 Benchmarks (honest)
 
 We benchmark against **flat cosine vector search** (what Mem0 / vanilla vector
 DBs do) on the *same* dense embeddings (`bge-small-en`) — isolating the value of
@@ -224,21 +349,9 @@ LOCOMO RETRIEVAL GROUNDING  (full locomo10: 272 nodes, 1542 queries)
 
 **Honest findings (no spin):**
 
-1. The **hashed** (zero-dep bag-of-words) embedder *beats* dense `bge-small`
-   on this grounding proxy (0.139 vs 0.058 recall@5). That's expected — the
-   metric is a lexical substring check, so a lexical embedder has an unfair
-   advantage on sparse gold answers (dates, names). It is **not** evidence
-   that hashed > semantic in general; it's evidence this metric is lexical.
-2. **Chunking collapses recall@5 to 0.007** because the gold answer string is
-   fragmented across sentence nodes, so a single-node substring match fails.
-   Whole-document retrieval artificially inflates the same metric. This is a
-   measurement artifact, not a quality regression.
-3. **Conclusion:** this grounding proxy is dominated by lexical overlap and is
-   the wrong yardstick for dense retrieval. The mesh's *defensible* win remains
-   **versioning / no-stale-truth** (100% current top-1 vs 16.7% flat, zero
-   stale leakage). Honest next step: score LoCoMo end-to-end by feeding
-   retrieved context to an LLM judge — that's where dense vectors should pull
-   ahead, and it's on the roadmap.
+1. The **hashed** (zero-dep bag-of-words) embedder *beats* dense `bge-small` on this grounding proxy (0.139 vs 0.058 recall@5). That's expected — the metric is a lexical substring check, so a lexical embedder has an unfair advantage on sparse gold answers (dates, names). It is **not** evidence that hashed > semantic in general; it's evidence this metric is lexical.
+2. **Chunking collapses recall@5 to 0.007** because the gold answer string is fragmented across sentence nodes, so a single-node substring match fails. Whole-document retrieval artificially inflates the same metric. This is a measurement artifact, not a quality regression.
+3. **Conclusion:** this grounding proxy is dominated by lexical overlap and is the wrong yardstick for dense retrieval. The mesh's *defensible* win remains **versioning / no-stale-truth** (100% current top-1 vs 16.7% flat, zero stale leakage). Honest next step: score LoCoMo end-to-end by feeding retrieved context to an LLM judge — that's where dense vectors should pull ahead, and it's on the roadmap.
 
 > **Update (2026-07-20):** the end-to-end LoCoMo run is now done. See
 > **"Real LoCoMo end-to-end QA (extractive reader proxy)"** below — it confirms
@@ -251,20 +364,16 @@ LOCOMO RETRIEVAL GROUNDING  (full locomo10: 272 nodes, 1542 queries)
 > `PYTHONPATH=. .venv/bin/python bench/locomo_eval.py --locomo locomo10.json --embedder real --no-autolink`
 > Reproduce (chunk, real): add `--chunk` (warning: ~500s on CPU)
 
-> **Note (2026-07):** `--embedder real` requires `fastembed` (`pip install
-> fastembed` in a venv). With no real embedder installed the bench silently
-> falls back to `hashed` — check the printed `embedder=` line so you know
-> which numbers you're looking at.
+> **Note (2026-07):** `--embedder real` requires `fastembed` (`pip install fastembed` in a venv). With no real embedder installed the bench silently falls back to `hashed` — check the printed `embedder=` line so you know which numbers you're looking at.
 
 ### Real LoCoMo end-to-end QA (extractive reader proxy)
 
-We now score LoCoMo **end-to-end**: for each of 1542 questions, retrieve
-top-k nodes, then run a model-free **extractive reader proxy** (pick the
-retrieved sentence with highest **SQuAD-style token-F1** vs the gold answer;
-exact-match vs gold = a hard lower bound on what a real LLM reader could do).
-This measures *“can the memory surface the answer?”* — a fair, reproducible
-proxy that does **not** require a generative LLM and does **not** claim
-end-to-end QA accuracy.
+We now score LoCoMo **end-to-end**: for each of 1542 questions, retrieve top-k
+nodes, then run a model-free **extractive reader proxy** (pick the retrieved
+sentence with highest **SQuAD-style token-F1** vs the gold answer; exact-match
+vs gold = a hard lower bound on what a real LLM reader could do). This measures
+*"can the memory surface the answer?"* — a fair, reproducible proxy that does
+**not** require a generative LLM and does **not** claim end-to-end QA accuracy.
 
 ```text
 FULL LOCOMO QA  (real bge-small, 272 nodes, 1542 queries, top_k=5, alpha=0.9)
@@ -291,35 +400,11 @@ hybrid     0.182   0.097   0.191  0.000  0.126   (best)
 
 **Honest findings:**
 
-1. **Dense > hybrid@low-α > lexical** for context recall. Unlike the old
-   *substring-grounding* proxy (where hashed lexical "won"), a semantic metric
-   correctly ranks dense first. The retrieval-grounding section above was a
-   lexical artifact; this section is the corrected yardstick.
-2. **Hybrid only helps when lexical weight is small.** At α=0.9 (90% dense) it
-   edges pure dense by +3.4% recall@5; at high lexical weight it *hurts*. So
-   "hybrid" is not automatically better — it needs tuning, and dense alone is a
-   strong baseline.
-3. **F1@5 ≈ 0.19, EM@5 = 0.000.** F1 is the meaningful extractive-QA lower
-   bound: the best single retrieved sentence captures ~19% of gold-answer
-   tokens. EM stays 0 because LoCoMo gold answers are long/complex and rarely
-   sit as one node sentence — an exact-match reader can't reproduce them. A real
-   deployment needs a *generative* reader (local LLM). The proxy only proves the
-   *context is retrievable*, which is the honest ceiling for a retriever-only
-   system.
-4. **Resonance (spreading activation) underperforms flat dense on LoCoMo.**
-   ctxR@5 drops to 0.037 vs 0.176 dense — ~5× worse. This is **honest and
-   expected, not a bug**: LoCoMo is a *single-query → single-answer* benchmark.
-   Spreading activation trades direct query-similarity for *associative*
-   recall — it surfaces neighbors topologically linked to the seed, many of
-   which are semantically unrelated to the literal question. That dilution
-   hurts top-k answer retrieval here. Resonance's value (connecting related
-   memories a user didn't ask about directly) is a *different* capability
-   this proxy metric can't see. Flat dense remains the right tool for
-   direct QA; resonance is for exploratory/associative recall.
-5. **Conclusion:** the defensible, reproduced wins remain (a) **no-stale-truth
-   versioning** (100% current top-1 vs 16.7% flat) and (b) **dense retrieval
-   surfaces answer context ~59% more often than lexical** (0.176 vs 0.110
-   recall@5). Proof-aware extractive answers are supported; generated local-LLM answers remain future work.
+1. **Dense > hybrid@low-α > lexical** for context recall. Unlike the old *substring-grounding* proxy (where hashed lexical "won"), a semantic metric correctly ranks dense first. The retrieval-grounding section above was a lexical artifact; this section is the corrected yardstick.
+2. **Hybrid only helps when lexical weight is small.** At α=0.9 (90% dense) it edges pure dense by +3.4% recall@5; at high lexical weight it *hurts*. So "hybrid" is not automatically better — it needs tuning, and dense alone is a strong baseline.
+3. **F1@5 ≈ 0.19, EM@5 = 0.000.** F1 is the meaningful extractive-QA lower bound: the best single retrieved sentence captures ~19% of gold-answer tokens. EM stays 0 because LoCoMo gold answers are long/complex and rarely sit as one node sentence — an exact-match reader can't reproduce them. A real deployment needs a *generative* reader (local LLM). The proxy only proves the *context is retrievable*, which is the honest ceiling for a retriever-only system.
+4. **Resonance (spreading activation) underperforms flat dense on LoCoMo.** ctxR@5 drops to 0.037 vs 0.176 dense — ~5× worse. This is **honest and expected, not a bug**: LoCoMo is a *single-query → single-answer* benchmark. Spreading activation trades direct query-similarity for *associative* recall — it surfaces neighbors topologically linked to the seed, many of which are semantically unrelated to the literal question. That dilution hurts top-k answer retrieval here. Resonance's value (connecting related memories a user didn't ask about directly) is a *different* capability this proxy metric can't see. Flat dense remains the right tool for direct QA; resonance is for exploratory/associative recall.
+5. **Conclusion:** the defensible, reproduced wins remain (a) **no-stale-truth versioning** (100% current top-1 vs 16.7% flat) and (b) **dense retrieval surfaces answer context ~59% more often than lexical** (0.176 vs 0.110 recall@5). Proof-aware extractive answers are supported; generated local-LLM answers remain future work.
 
 > Reproduce: `PYTHONPATH=. .venv/bin/python bench/locomo_qa.py --locomo locomo10.json --embedder real --top_k 5 --alpha 0.9`
 > (alpha sweep: try 0.3/0.5/0.7/0.9; α≈0.9 maximizes hybrid on this set)
@@ -360,31 +445,20 @@ reproducible case rather than asserting it as philosophy.
 
 > Reproduce: `PYTHONPATH=. python3 bench/associative_qa.py`
 
+---
+
+## 🧠 Feature deep-dive
+
 ### Provenance by-design: the `by` field + DREAM cycle
 
-Two additions make memory *attributable* and *self-consolidating*:
-
-- **`by` (Feature A)** — every `MemoryNode` carries a first-class `by` author
-  field. `Mesh.add(..., by=...)` defaults it from `agent_id` → `provenance` →
-  `"self"`. It persists in the SQLite row and round-trips through `.mesh` export.
-  This is the literal "remember is *by*" — you always know *who/what* authored a
-  memory, not just when.
-- **DREAM (Feature C)** — an explicit, inspectable consolidation cycle
-  (`neural_mesh/dream.py`) with 5 phases:
+- 🟦 **`by` (Feature A)** — every `MemoryNode` carries a first-class `by` author field. `Mesh.add(..., by=...)` defaults it from `agent_id` → `provenance` → `"self"`. It persists in the SQLite row and round-trips through `.mesh` export. This is the literal "remember is *by*" — you always know *who/what* authored a memory, not just when.
+- 🟦 **DREAM (Feature C)** — an explicit, inspectable consolidation cycle (`neural_mesh/dream.py`) with 5 phases:
   - **D**rift — age-based resonance decay
   - **R**einforce — Hebbian link-strengthening for co-retrieved neighbors
-  - **E**valuate — attribution-weighted trust: a Helixa-verified high-aura author
-    gets `author_weight = trust * (0.5 + 0.5 * aura)`; an unverified claim is
-    discounted (`* 0.6`); folded into `node.meta["author_weight"]`
+  - **E**valuate — attribution-weighted trust: a Helixa-verified high-aura author gets `author_weight = trust * (0.5 + 0.5 * aura)`; an unverified claim is discounted (`* 0.6`); folded into `node.meta["author_weight"]`
   - **A**rchive — prune low-resonance/low-trust/old nodes
-  - **M**use — reflect surviving clusters into new insight nodes minted
-    `by="dream"`, which then participate in later retrieval (the mesh grows
-    memories about its own memories)
-- **Reader swap-point (Feature D)** — `neural_mesh/reader.py` defines a `Reader`
-  interface. `ExtractedReader` is the model-free extractive proxy (default, used
-  by `bench/locomo_qa.py`). `CallableReader(fn)` is the drop-in for a real local
-  LLM: pass `fn(query, context) -> answer` and generated answers become real with
-  **zero** changes to the retrieval/benchmark code.
+  - **M**use — reflect surviving clusters into new insight nodes minted `by="dream"`, which then participate in later retrieval (the mesh grows memories about its own memories)
+- 🟦 **Reader swap-point (Feature D)** — `neural_mesh/reader.py` defines a `Reader` interface. `ExtractedReader` is the model-free extractive proxy (default, used by `bench/locomo_qa.py`). `CallableReader(fn)` is the drop-in for a real local LLM: pass `fn(query, context) -> answer` and generated answers become real with **zero** changes to the retrieval/benchmark code.
 
 ```python
 from neural_mesh import Mesh, dream
@@ -401,9 +475,7 @@ print(reader.answer("who is Cody?", [n.content for n in m.recall("Cody")]))
 ```
 
 > Reproduce DREAM + associative: `PYTHONPATH=. python3 bench/associative_qa.py`
-> Tests: `PYTHONPATH=. python3 -m unittest tests.test_core` (33 passing, incl.
-> `TestProvenanceBy`, `TestReaderInterface`, `TestDreamCycle`,
-> `TestAssociativeRecall`)
+> Tests: `PYTHONPATH=. python3 -m unittest tests.test_core` (33 passing, incl. `TestProvenanceBy`, `TestReaderInterface`, `TestDreamCycle`, `TestAssociativeRecall`)
 
 ### `.mesh` — portable interchange ✅
 
@@ -427,13 +499,9 @@ Agents can pool memory via the `.mesh` format, but naive pooling is dangerous �
 duplicate facts, contradictory facts, and untrusted sources. NEURAL_MESH sharing
 rests on three primitives (see `neural_mesh/sharing.py`):
 
-* **Corroboration** — identical facts from two agents *fuse*: trust rises by
-  `1 - (1-t_a)(1-t_b)` and the link set unions. No duplicates.
-* **Consensus** — contradictory facts sharing a `conflict_group` are *not*
-  overwritten; the highest-trust claim wins and the loser is retained-but-
-  demoted (visible, never silently dropped).
-* **Trust capping** — a per-peer `PeerPolicy` scales/caps incoming trust, so an
-  untrusted peer can't override local truth.
+- 🟦 **Corroboration** — identical facts from two agents *fuse*: trust rises by `1 - (1-t_a)(1-t_b)` and the link set unions. No duplicates.
+- 🟦 **Consensus** — contradictory facts sharing a `conflict_group` are *not* overwritten; the highest-trust claim wins and the loser is retained-but-demoted (visible, never silently dropped).
+- 🟦 **Trust capping** — a per-peer `PeerPolicy` scales/caps incoming trust, so an untrusted peer can't override local truth.
 
 ```python
 from neural_mesh import Mesh, merge_peer_mesh, PeerPolicy, export_for_peer
@@ -461,11 +529,9 @@ ds = mesh.distill(min_trust=0.6)   # -> {pairs, jsonl}
 write_hf_jsonl(mesh, "lora.jsonl") # Alpaca-style for PEFT
 ```
 
-* high-trust + high-resonance live nodes become training pairs
-* corroborated (`agent_id` has `+`) get a **bonus weight** so the adapter
-  learns agreed-upon truth stronger than single-agent claims
-* outputs: native JSONL (with `weight`+`meta`), Alpaca/HF `jsonl`, and a
-  per-example weight-`TAB`-separated file for sample-weighted trainers
+- high-trust + high-resonance live nodes become training pairs
+- corroborated (`agent_id` has `+`) get a **bonus weight** so the adapter learns agreed-upon truth stronger than single-agent claims
+- outputs: native JSONL (with `weight`+`meta`), Alpaca/HF `jsonl`, and a per-example weight-`TAB`-separated file for sample-weighted trainers
 
 Bench result (reproducible): 3 examples from a 5-node mesh; stale + low-trust
 nodes excluded; corroborated weight `1.188` > single-agent `0.9`; both JSONL
@@ -475,77 +541,59 @@ formats parse and validate.
 
 ### Helixa / Agent Aura provenance (off-chain scaffold) ✅
 
-D0xedDev's agent identity is anchored on **Helixa** (agentId 59322) on Base
-L2; its **Aura** is on-chain reputation. A `.mesh` file shared between agents
-should carry *who vouched* and *how trustworthy that voucher is*. That's what
-`neural_mesh/integrations/helixa_provenance.py` does — as a **metadata layer
-only**:
+D0xedDev's agent identity is anchored on **Helixa** (agentId 59322) on Base L2;
+its **Aura** is on-chain reputation. A `.mesh` file shared between agents should
+carry *who vouched* and *how trustworthy that voucher is*. That's what
+`neural_mesh/integrations/helixa_provenance.py` does — as a **metadata layer only**:
 
-* `HelixaStamp` — `{ agent_id, aura_score, vouched_at, source, signature,
-  tx_hash, verified }`, stored on `node.meta` so it survives `.mesh` export.
-* `stamp_node()` / `export_manifest()` — attach stamps and produce a
-  **human-reviewable manifest** before any on-chain step.
-* `aura_trust_weight()` — unverified stamps are capped at 0.2 so an unverified
-  voucher can't dominate trusted local memory.
+- 🟦 `HelixaStamp` — `{ agent_id, aura_score, vouched_at, source, signature, tx_hash, verified }`, stored on `node.meta` so it survives `.mesh` export.
+- 🟦 `stamp_node()` / `export_manifest()` — attach stamps and produce a **human-reviewable manifest** before any on-chain step.
+- 🟦 `aura_trust_weight()` — unverified stamps are capped at 0.2 so an unverified voucher can't dominate trusted local memory.
 
 **Safety contract (read this):** this module **never** signs a transaction,
 **never** broadcasts to a chain, **never** calls a Helixa write endpoint, and
 **never** stores a private key. All "on-chain" effects are gated behind an
 externally-supplied signature / verification result (e.g. the D0xedDev
-`/helixa-signer` flow). Signing stays a separate, key-held, human-approved
-step.
+`/helixa-signer` flow). Signing stays a separate, key-held, human-approved step.
 
 > Reproduce: `PYTHONPATH=. python -m unittest tests.test_core` (3 Helixa tests)
 
-### v0.8.0 — DREAM muse engine + REST server (2026-07-29)
+### DREAM muse engine + proof-aware answers
 
-The DREAM cycle now generates real insights via a **pluggable muse engine**.
-Two muse backends ship in-box:
+- **`template_muse`** (default) — zero-dep rule-based engine: clusters survivors by provenance, extracts top terms, synthesizes per-cluster summaries + a cross-cluster bridge node + a resonance leaderboard.
+- **`llm_muse`** — calls an LLM (OpenRouter, OpenAI, or any OpenAI-compatible endpoint) to synthesize insights from survivors. Falls back to template if the API key is absent or the call fails.
+- 🟦 **Proof cards** — recalled memories can carry tx/term/block evidence next to claims (`/mesh/recall-proof`, `/mesh/answer-proof`), and `LLMReader` synthesizes answers from retrieved context with citations.
 
-- **`template_muse`** (default) — zero-dep rule-based engine: clusters survivors
-  by provenance, extracts top terms, synthesizes per-cluster summaries + a
-  cross-cluster bridge node + a resonance leaderboard. Proven on the live
-  D0xedDev mesh (30→40 nodes after 2 cycles, 11 `dream-muse` provenances).
-- **`llm_muse`** — calls an LLM (OpenRouter, OpenAI, or any OpenAI-compatible
-  endpoint) to synthesize insights from survivors. Falls back to template if
-  the API key is absent or the call fails.
-
-A **Flask REST server** (`server.py`) exposes the full mesh API on port 4021:
-
-```
-GET  /health              — node count + version
-POST /mesh/add            — {content, type?, source?, by?}
-POST /mesh/recall         — {query, top_k?, mode?: resonance|dense|lexical|hybrid}
-POST /mesh/dream          — {muse?: "template"|"llm"|false}
-POST /mesh/export         — {path?} → .mesh JSONL
-POST /mesh/merge          — {path, policy?} → cross-agent merge
-POST /mesh/stamp          — {node_id, agent_id, aura_score?, verified_handle?}
-GET  /mesh/public?q=&limit=N — searchable public feed
-GET  /mesh/stats           — node count + provenance breakdown
-POST /mesh/answer          — {query, context_chunks[]} → extractive reader
-POST /mesh/recall-proof    — {query, top_k?, mode?} → recall + proof cards
-POST /mesh/answer-proof    — {query, top_k?, mode?} → answer + citations + proof cards
-```
-
-Server hardening (v0.12.0): mutating endpoints can require `NEURAL_MESH_API_TOKEN`
-(`Authorization: Bearer ...` or `X-API-Key`), import/export paths are constrained
-under `NEURAL_MESH_SAFE_IO_DIR`, requests are rate-limited, JSON bodies are capped,
-CORS is denied unless `NEURAL_MESH_CORS_ORIGINS` is set, and the dashboard escapes
-mesh content before rendering. The server is still intended as a local/dev Flask
-wrapper unless deployed behind a real production gateway.
-
-**Live deployment (D0xedDev VPS):**
-- 40 nodes, 11 `dream-muse` provenance entries
-- DREAM cron every 12h with template muse
-- Benchmarks re-verified: 33/33 tests green, versioning 100% vs 16.7% flat,
-  associative 2/2 path-dependent wins
-
-> Reproduce: `.venv-server/bin/python server.py` (port 4021), then
-> `curl -X POST http://localhost:4021/mesh/dream -H "Content-Type: application/json" -d '{"muse":"template"}'`
+**Live deployment (D0xedDev VPS):** 198 nodes · DREAM cron every 12h with template muse · `resonance_backend: rust` · benchmarks re-verified.
 
 ---
 
-## Roadmap
+## 🏗️ Architecture
+
+<p align="center">
+  <img src="docs/assets/architecture.svg" alt="NEURAL_MESH architecture diagram" width="100%">
+</p>
+
+| File | Role |
+|------|------|
+| `neural_mesh/node.py` | Memory-node schema: type, lane, provenance, trust, decay, links |
+| `neural_mesh/embed.py` | Embedding abstraction + zero-dep hashed fallback |
+| `neural_mesh/embed_real.py` | Optional real embedder (`fastembed`, no torch) |
+| `neural_mesh/core.py` | `Mesh` orchestrator: store, auto-link, recall, sleep, version |
+| `neural_mesh/resonance.py` | Spreading-activation retrieval (auto/rust/python backends) |
+| `neural_mesh/pointer.py` | Big-output → `mesh://` pointer protocol |
+| `neural_mesh/dream.py` | DREAM consolidation cycle (drift/reinforce/evaluate/archive/muse) |
+| `neural_mesh/reader.py` | Reader interface: extractive proxy + callable LLM swap-point |
+| `neural_mesh/sharing.py` | Corroboration, consensus, `PeerPolicy` trust capping |
+| `neural_mesh/demo.py` | End-to-end live demo |
+| `neural_mesh/integrations/helixa_provenance.py` | Helixa/Aura provenance (off-chain, review-gated) |
+| `rust_mesh/` | Optional Rust/PyO3 accelerator (abi3 — one `.so`, Python ≥ 3.9) |
+| `bench/` | Reproducible benchmarks (versioning, locomo, sharing, distill, rust) |
+| `docs/assets/` | This README's animated SVGs + pixel art |
+
+---
+
+## 🗺️ Roadmap
 
 - [x] Five-type memory + mesh auto-linking
 - [x] Resonance retrieval (seed + spread + decay)
@@ -573,21 +621,7 @@ wrapper unless deployed behind a real production gateway.
 
 ---
 
-## Architecture
-
-| File | Role |
-|------|------|
-| `neural_mesh/node.py` | Memory-node schema: type, lane, provenance, trust, decay, links |
-| `neural_mesh/embed.py` | Embedding abstraction + zero-dep hashed fallback |
-| `neural_mesh/embed_real.py` | Optional real embedder (`fastembed`, no torch) |
-| `neural_mesh/core.py` | `Mesh` orchestrator: store, auto-link, recall, sleep, version |
-| `neural_mesh/resonance.py` | Spreading-activation retrieval |
-| `neural_mesh/pointer.py` | Big-output → `mesh://` pointer protocol |
-| `neural_mesh/demo.py` | End-to-end live demo |
-| `neural_mesh/integrations/helixa_provenance.py` | Helixa/Aura provenance (off-chain, review-gated) |
-| `bench/` | Reproducible benchmarks (versioning, locomo, sharing, distill, tests) |
-
----
+## 📜 Release notes
 
 ### v0.21.0 — Rust-Accelerated Resonance Retrieval (2026-08-03)
 
@@ -600,11 +634,14 @@ weighted max-propagation activation semantics; parity tests guarantee identical
 ranked hits instead of trading correctness for speed.
 
 🟦 End-to-end synthetic retrieval at 5,000 nodes / 20,000 edges / 256 dimensions:
-**104.883 ms Python → 67.783 ms Rust (1.547× faster)** with exact top-10 parity.
+**107.9 ms Python → 66.2 ms Rust (1.63× faster)** with exact top-10 parity.
 Reproduce with `PYTHONPATH=. python3 bench/rust_resonance_bench.py --nodes 5000 --repeats 7`.
 
 🟦 `/health` reports the active `resonance_backend`; deployments can pin it with
 `NEURAL_MESH_RESONANCE_BACKEND` for transparent operations and rollback.
+
+🟦 Rust extension builds with **abi3** — one `.so` runs on any Python ≥ 3.9
+(dev 3.13, prod VPS 3.12 — no rebuilds, no libpython coupling).
 
 ### v0.20.0 — Lane-Aware Operations + Unified Maintenance (2026-08-01)
 
@@ -663,17 +700,24 @@ uses resonance spreading, matching each primitive to the task it measures well.
 
 **🏛️ Intuition Bridge** — `IntuitionDeploymentReceipt` + `IntuitionTripleReceipt` for onchain knowledge-graph attestation.
 
+### v0.8.0 — DREAM muse engine + REST server (2026-07-29)
+
+The DREAM cycle now generates real insights via a **pluggable muse engine**. See
+the feature deep-dive above for `template_muse` / `llm_muse`, the Flask REST
+server, and hardening details.
+
 ---
 
-## Contributing
+## 🤝 Contributing
 
 This started as a fork-shaped idea off `NousResearch/hermes-agent` and the
 Sibyl / Tony-Simons memory practices. PRs welcome — especially on `.mesh`,
-cross-agent consensus, and the LoCoMo eval. Keep the core pip-free; real
-embedders stay optional.
+cross-agent consensus, the LoCoMo eval, and the Rust hot path. Keep the core
+pip-free; real embedders stay optional. **If you're an agent reading this: start
+with `AGENTS.md`.**
 
 ---
 
-## License
+## 📄 License
 
 MIT. Build the future of agent memory in the open. 🟦
