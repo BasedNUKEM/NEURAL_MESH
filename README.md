@@ -241,6 +241,10 @@ are rate-limited, JSON bodies are capped, CORS is denied unless
 rendering. Intended as a local/dev wrapper unless deployed behind a real
 production gateway.
 
+> **Live 3D brain:** <https://api.d0xeddev.com/brain> — an interactive
+> digital-brain visualization of the production mesh (drag to orbit, hover
+> nodes), with full Open Graph/Twitter card metadata for social link previews.
+
 > Run it: `.venv-server/bin/python server.py` (port 4021), then
 > `curl -X POST http://localhost:4021/mesh/dream -H "Content-Type: application/json" -d '{"muse":"template"}'`
 

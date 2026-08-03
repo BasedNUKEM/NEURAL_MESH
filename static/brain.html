@@ -3,7 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEURAL_MESH Brain — v0.20.0 — D0xedDev</title>
+<title>NEURAL_MESH Brain — live agentic memory mesh · v0.21.0</title>
+<meta name="description" content="NEURAL_MESH — a self-organizing, self-forgetting agentic memory mesh for AI agents. Typed memory, mesh topology, resonance retrieval, hot/cold lanes, sleep/prune, versioned truth. Live 3D brain.">
+<link rel="canonical" href="https://api.d0xeddev.com/brain">
+<meta name="theme-color" content="#08090a">
+<meta name="robots" content="index,follow">
+<link rel="icon" type="image/png" href="/brain/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="NEURAL_MESH">
+<meta property="og:url" content="https://api.d0xeddev.com/brain">
+<meta property="og:title" content="NEURAL_MESH — agentic memory mesh">
+<meta property="og:description" content="A self-organizing, self-forgetting memory mesh for AI agents. Typed memory · resonance retrieval · hot/cold lanes · versioned truth · Rust hot path. Drag the live brain.">
+<meta property="og:image" content="https://api.d0xeddev.com/brain/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.21.0">
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NEURAL_MESH — agentic memory mesh">
+<meta name="twitter:description" content="Self-organizing · self-forgetting memory for AI agents. Typed lanes, resonance retrieval, versioned truth, Rust hot path. Drag the live brain.">
+<meta name="twitter:image" content="https://api.d0xeddev.com/brain/og.png">
+<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.21.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;510;590&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -14,6 +37,8 @@ canvas { display:block; position:fixed; top:0; left:0; z-index:1; touch-action:n
 .brand { display:flex; align-items:center; gap:0.6rem; }
 .brand h1 { font-size:1.1rem; font-weight:590; color:#f7f8f8; letter-spacing:-0.02em; }
 .brand .ver { font-size:0.7rem; color:#8a8f98; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(255,255,255,0.04); padding:2px 8px; border-radius:4px; }
+.brand .repolink { font-size:0.7rem; color:#4dabf7; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(77,171,247,0.08); border:1px solid rgba(77,171,247,0.28); padding:2px 8px; border-radius:4px; text-decoration:none; }
+.brand .repolink:hover { background:rgba(77,171,247,0.18); }
 .hud-card { background:rgba(15,16,17,0.92); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:0.8rem 1rem; backdrop-filter:blur(12px); }
 .hud-card .label { font-size:0.65rem; color:#62666d; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.2rem; }
 .hud-card .value { font-size:1.4rem; font-weight:590; color:#f7f8f8; }
@@ -61,7 +86,8 @@ canvas { display:block; position:fixed; top:0; left:0; z-index:1; touch-action:n
 <div id="hud">
   <div class="brand">
     <h1>🧠 NEURAL_MESH BRAIN</h1>
-    <span class="ver" id="version">v0.20.0</span>
+    <span class="ver" id="version">v0.21.0</span>
+    <a class="repolink" href="https://github.com/BasedNUKEM/NEURAL_MESH" target="_blank" rel="noopener" title="Source code on GitHub">◈ repo</a>
   </div>
   <div id="stats-grid">
     <div class="hud-card"><div class="label">Nodes</div><div class="value" id="nodes-val">—</div></div>
