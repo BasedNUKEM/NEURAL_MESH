@@ -26,6 +26,14 @@ class TestOperationalEndpoints(unittest.TestCase):
         server.mesh.db.close()
         self.tmp.cleanup()
 
+    def test_health_reports_active_resonance_backend(self):
+        response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json()["resonance_backend"],
+            server.mesh.stats()["resonance_backend"],
+        )
+
     def test_consolidate_endpoint_promotes_durable_hot_node(self):
         node = server.mesh.add("durable procedure", lane="hot", trust=0.9)
         node.created_at = time.time() - 10

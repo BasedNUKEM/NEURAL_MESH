@@ -568,7 +568,7 @@ wrapper unless deployed behind a real production gateway.
 - [x] npm dependency audit resolved — lodash override (4.18.1) drops 6 high vulns to 0
 - [x] LoCoMo QA evaluation — LLM judge scores mesh answers against ground truth with `/eval/qa`
 - [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)  ← LLMReader enables this
-- [ ] Rust hot path for large meshes
+- [x] Rust hot path for large meshes — exact-parity query scoring + weighted activation spread
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer
 
 ---
@@ -588,6 +588,23 @@ wrapper unless deployed behind a real production gateway.
 | `bench/` | Reproducible benchmarks (versioning, locomo, sharing, distill, tests) |
 
 ---
+
+### v0.21.0 — Rust-Accelerated Resonance Retrieval (2026-08-03)
+
+🟦 Resonance query scoring now uses an optional Rust/PyO3 hot path while retaining
+the pure-stdlib Python backend as an automatic fallback. Pin either path with
+`Mesh(..., resonance_backend="rust"|"python"|"auto")`.
+
+🟦 The Rust extension implements the mesh's exact dot-similarity contract and
+weighted max-propagation activation semantics; parity tests guarantee identical
+ranked hits instead of trading correctness for speed.
+
+🟦 End-to-end synthetic retrieval at 5,000 nodes / 20,000 edges / 256 dimensions:
+**104.883 ms Python → 67.783 ms Rust (1.547× faster)** with exact top-10 parity.
+Reproduce with `PYTHONPATH=. python3 bench/rust_resonance_bench.py --nodes 5000 --repeats 7`.
+
+🟦 `/health` reports the active `resonance_backend`; deployments can pin it with
+`NEURAL_MESH_RESONANCE_BACKEND` for transparent operations and rollback.
 
 ### v0.20.0 — Lane-Aware Operations + Unified Maintenance (2026-08-01)
 

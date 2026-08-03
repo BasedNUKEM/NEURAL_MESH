@@ -64,7 +64,10 @@ def harden_response(resp):
 # Persist to a file so data survives restarts.
 # Set check_same_thread=False because Flask's dev server uses threads.
 DB_PATH = os.environ.get("NEURAL_MESH_DB", os.path.join(os.path.dirname(__file__), "mesh.db"))
-mesh = Mesh(db_path=DB_PATH)
+mesh = Mesh(
+    db_path=DB_PATH,
+    resonance_backend=os.environ.get("NEURAL_MESH_RESONANCE_BACKEND", "auto"),
+)
 mesh.db = sqlite3.connect(DB_PATH, check_same_thread=False)  # Overwrite with thread-safe connection
 mesh.db.row_factory = sqlite3.Row  # Critical: Mesh._load() indexes rows by column name
 POINTER_ROOT = os.environ.get(
@@ -87,7 +90,8 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.20.0",
+        "version": "0.21.0",
+        "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
 # ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -410,7 +414,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.20.0",
+        "version": "0.21.0",
         "provenance_breakdown": provenance_breakdown,
     })
 

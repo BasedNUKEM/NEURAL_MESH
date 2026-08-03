@@ -11,15 +11,19 @@ import time
 
 from .embed import embed
 from .node import MemoryNode, MemoryType
-from .resonance import retrieve as _resonance_retrieve
+from .resonance import retrieve as _resonance_retrieve, _select_backend
 
 
 class Mesh:
-    def __init__(self, db_path: str = ":memory:", embedder=embed, link_threshold=0.30):
+    def __init__(self, db_path: str = ":memory:", embedder=embed, link_threshold=0.30,
+                 resonance_backend: str = "auto"):
+        if resonance_backend not in {"auto", "python", "rust"}:
+            raise ValueError("resonance_backend must be 'auto', 'python', or 'rust'")
         self.db = sqlite3.connect(db_path)
         self.db.row_factory = sqlite3.Row
         self.embedder = embedder
         self.link_threshold = link_threshold
+        self.resonance_backend = resonance_backend
         self._init_db()
         # In-memory node cache so repeated retrieval doesn't reload SQLite every
         # call. `add`/`sleep`/`_supersede` invalidate it via _invalidate_cache.
@@ -192,7 +196,8 @@ class Mesh:
         stats for sleep()/consolidate()."""
         qe = self.embedder(query)
         nodes = {n.id: n for n in self._live_nodes(lane)}
-        hits = _resonance_retrieve(nodes, qe, top_k=top_k)
+        hits = _resonance_retrieve(
+            nodes, qe, top_k=top_k, backend=self.resonance_backend)
         for n in hits:
             self._touch(n, writeback=writeback)
         return hits
@@ -363,7 +368,9 @@ class Mesh:
         for n in live:
             by_type[n.type.value] = by_type.get(n.type.value, 0) + 1
         hot = sum(1 for n in live if n.lane == "hot")
-        return {"total": len(live), "by_type": by_type, "hot": hot, "cold": len(live) - hot}
+        return {"total": len(live), "by_type": by_type, "hot": hot,
+                "cold": len(live) - hot,
+                "resonance_backend": _select_backend(self.resonance_backend)}
 
 
 def _sim(a, b) -> float:

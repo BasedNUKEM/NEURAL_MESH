@@ -97,6 +97,85 @@ fn bulk_cosine_similarity(flat_a: Vec<f32>, flat_b: Vec<f32>, dim: usize) -> PyR
     Ok(results)
 }
 
+/// Score one query against a flat matrix using the core embedding contract.
+///
+/// NEURAL_MESH embedders return normalized vectors and the Python fallback's
+/// `cosine()` is intentionally a dot product. Keeping dot semantics here makes
+/// the accelerated and stdlib paths exactly interchangeable, including for
+/// custom embedders that provide non-normalized vectors.
+#[pyfunction]
+fn query_dot_similarity(query: Vec<f32>, flat_nodes: Vec<f32>, dim: usize) -> PyResult<Vec<f32>> {
+    if dim == 0 || query.len() != dim || flat_nodes.len() % dim != 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "query ({}) and flat_nodes ({}) must align to dim ({})",
+            query.len(), flat_nodes.len(), dim
+        )));
+    }
+    let num_nodes = flat_nodes.len() / dim;
+    let mut results = Vec::with_capacity(num_nodes);
+    for node_idx in 0..num_nodes {
+        let offset = node_idx * dim;
+        let mut dot = 0.0f32;
+        for i in 0..dim {
+            dot += query[i] * flat_nodes[offset + i];
+        }
+        results.push(dot);
+    }
+    Ok(results)
+}
+
+/// Spread weighted activation across a graph using NEURAL_MESH's exact
+/// max-propagation contract.
+///
+/// `initial` contains one activation per node. Only `frontier` nodes propagate
+/// during the first step. A neighbor is queued for the next step only when the
+/// candidate path improves its current activation:
+///
+///     gain = activation[source] * decay * edge_weight
+///
+/// This deliberately mirrors `neural_mesh.resonance` rather than the additive
+/// scoring used by `Graph.associative_recall`.
+#[pyfunction]
+fn spread_activation(
+    initial: Vec<f32>,
+    edges: Vec<(usize, usize, f32)>,
+    frontier: Vec<usize>,
+    spread_steps: usize,
+    decay: f32,
+) -> Vec<f32> {
+    let num_nodes = initial.len();
+    let mut activation = initial;
+    let mut adj = vec![Vec::<(usize, f32)>::new(); num_nodes];
+    for (source, target, weight) in edges {
+        if source < num_nodes && target < num_nodes {
+            adj[source].push((target, weight));
+        }
+    }
+
+    let mut current: Vec<usize> = frontier
+        .into_iter()
+        .filter(|&node| node < num_nodes)
+        .collect();
+    for _ in 0..spread_steps {
+        let mut next = Vec::new();
+        for source in current {
+            let source_activation = activation[source];
+            for &(target, weight) in &adj[source] {
+                let gain = source_activation * decay * weight;
+                if gain > activation[target] {
+                    activation[target] = gain;
+                    next.push(target);
+                }
+            }
+        }
+        current = next;
+        if current.is_empty() {
+            break;
+        }
+    }
+    activation
+}
+
 // ============================================================================
 // Graph traversal
 // ============================================================================
@@ -321,6 +400,8 @@ fn graph_from_edges(num_nodes: usize, edges: Vec<(usize, usize, f32)>) -> Graph 
 fn rust_mesh(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cosine_similarity, m)?)?;
     m.add_function(wrap_pyfunction!(bulk_cosine_similarity, m)?)?;
+    m.add_function(wrap_pyfunction!(query_dot_similarity, m)?)?;
+    m.add_function(wrap_pyfunction!(spread_activation, m)?)?;
     m.add_function(wrap_pyfunction!(graph_from_edges, m)?)?;
     m.add_class::<Graph>()?;
     Ok(())
