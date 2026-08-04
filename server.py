@@ -90,7 +90,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.21.0",
+        "version": "0.22.0",
         "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
@@ -105,6 +105,66 @@ def dashboard():
 def brain():
     """Serve the 3D brain visualization."""
     return send_from_directory("static", "brain.html")
+
+@app.route("/brain/walk", methods=["POST"])
+def brain_walk():
+    """Associative walk from a seed node — graph traversal for brain animation.
+
+    Body: {node_id, hops?=2, top_n?=15}
+    Returns ordered path of nodes reachable through mesh links (BFS from seed).
+    Public read-only — the brain visualization calls this on node click.
+    """
+    data = request.get_json() or {}
+    node_id = data.get("node_id", "")
+    if not node_id:
+        return _json_error("node_id required", 400)
+
+    hops = max(1, min(int(data.get("hops", 2)), 4))
+    top_n = max(1, min(int(data.get("top_n", 15)), 30))
+
+    all_nodes = mesh._load()
+    seed = all_nodes.get(node_id)
+    if not seed:
+        return _json_error("node not found", 404)
+
+    visited = {node_id: 0}
+    frontier = [seed]
+    path = [{"node_id": node_id, "distance": 0,
+             "content": seed.content[:140],
+             "lane": seed.lane, "trust": round(seed.trust, 3)}]
+    total_reachable = 1
+
+    for hop in range(1, hops + 1):
+        next_frontier = []
+        for node in frontier:
+            # Sort links by weight desc so strongest edges are walked first
+            for nbr_id, weight in sorted(node.links.items(), key=lambda x: -x[1]):
+                if nbr_id not in visited:
+                    visited[nbr_id] = hop
+                    nbr = all_nodes.get(nbr_id)
+                    if nbr and not nbr.superseded_by:
+                        path.append({"node_id": nbr_id, "distance": hop,
+                                     "content": nbr.content[:140],
+                                     "lane": nbr.lane, "trust": round(nbr.trust, 3),
+                                     "edge_weight": round(weight, 3)})
+                        total_reachable += 1
+                        next_frontier.append(nbr)
+                        if len(path) >= top_n:
+                            break
+                if len(path) >= top_n:
+                    break
+            if len(path) >= top_n:
+                break
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    return jsonify({
+        "seed_id": node_id,
+        "path": path,
+        "hops": hops,
+        "total_reachable": total_reachable,
+    })
 
 # ─── CRUD ──────────────────────────────────────────────────────────────────
 
@@ -414,7 +474,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.21.0",
+        "version": "0.22.0",
         "provenance_breakdown": provenance_breakdown,
     })
 

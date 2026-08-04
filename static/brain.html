@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEURAL_MESH Brain — live agentic memory mesh · v0.21.0</title>
+<title>NEURAL_MESH Brain — live agentic memory mesh · v0.22.0</title>
 <meta name="description" content="NEURAL_MESH — a self-organizing, self-forgetting agentic memory mesh for AI agents. Typed memory, mesh topology, resonance retrieval, hot/cold lanes, sleep/prune, versioned truth. Live 3D brain.">
 <link rel="canonical" href="https://api.d0xeddev.com/brain">
 <meta name="theme-color" content="#000818">
@@ -20,13 +20,13 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:type" content="image/png">
-<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.21.0">
+<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.22.0">
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="NEURAL_MESH — agentic memory mesh">
 <meta name="twitter:description" content="Self-organizing · self-forgetting memory for AI agents. Typed lanes, resonance retrieval, versioned truth, Rust hot path. Drag the live brain.">
 <meta name="twitter:image" content="https://api.d0xeddev.com/brain/og.png">
-<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.21.0">
+<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.22.0">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#000818; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
@@ -78,7 +78,7 @@
 <div id="hud">
   <div class="brand">
     <h1>NEURAL_MESH</h1>
-    <span class="ver" id="version">v0.21.0</span>
+    <span class="ver" id="version">v0.22.0</span>
     <a class="repolink" href="https://github.com/BasedNUKEM/NEURAL_MESH" target="_blank" rel="noopener">github ↗</a>
   </div>
   <div id="stats-grid">
@@ -102,7 +102,7 @@
   <button id="mobile-detail-close" aria-label="Close node details" onclick="closeMobileDetail()">×</button>
   <div id="mobile-detail-body"></div>
 </div>
-<div class="instructions"><span class="desktop-help">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes &nbsp;|&nbsp; click → energy pulse</span><span class="mobile-help" style="display:none">☝ drag to orbit &nbsp;|&nbsp; pinch to zoom &nbsp;|&nbsp; tap nodes</span></div>
+<div class="instructions"><span class="desktop-help">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes &nbsp;|&nbsp; click → walk the mesh</span><span class="mobile-help" style="display:none">☝ drag to orbit &nbsp;|&nbsp; pinch to zoom &nbsp;|&nbsp; tap nodes → walk</span></div>
 
 <script type="importmap">
 {
@@ -461,10 +461,13 @@ function firePulse(origin) {
 }
 window.firePulse = firePulse;
 
-// Click → pulse at that point
+// Click → pulse + walk
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let hovered = null;
+let walkHighlights = [];   // active walk animation nodes
+let walkTrails = [];       // trail lines for walk activation
+
 function onPointerMove(e) {
   pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -494,11 +497,100 @@ function onPointerDown(e) {
   pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(meshGroup.children);
-  if (hits.length) firePulse(hits[0].object.position.clone());
-  else {
+  if (hits.length) {
+    const obj = hits[0].object;
+    firePulse(obj.position.clone());
+    // Run associative walk from this node
+    const nid = obj.userData.nodeId;
+    if (nid) runWalk(nid);
+  } else {
     const v = new THREE.Vector3(pointer.x, pointer.y, 0.5).unproject(camera);
     const dir = v.sub(camera.position).normalize();
     firePulse(camera.position.clone().add(dir.multiplyScalar(4)));
+  }
+}
+
+// ─── ASSOCIATIVE WALK (brain interaction) ───────
+function runWalk(nodeId) {
+  // Clear previous walk
+  clearWalk();
+  fetch('/brain/walk', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({node_id: nodeId, hops: 2, top_n: 12})
+  }).then(r => r.json()).then(data => {
+    if (!data.path || !data.path.length) return;
+    const total = data.path.length;
+    const delay = 180; // ms between each node highlight
+    data.path.forEach((step, i) => {
+      setTimeout(() => {
+        highlightWalkNode(step, i);
+        // Trail from previous node
+        if (i > 0) drawWalkTrail(data.path[i-1].node_id, step.node_id);
+      }, i * delay);
+    });
+  }).catch(e => console.warn('walk:', e.message));
+}
+
+function highlightWalkNode(step, index) {
+  const entry = nodeMap[step.node_id];
+  if (!entry) return;
+  const m = entry.three;
+  // Flash the node bright white
+  const origColor = m.material.color.getHex();
+  const pulse = new THREE.Mesh(
+    new THREE.SphereGeometry(m.geometry.parameters.radius * 3.5, 16, 16),
+    new THREE.MeshBasicMaterial({color: 0x00E5FF, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending})
+  );
+  pulse.position.copy(m.position);
+  pulse.userData = { scale: 1, opacity: 0.9, target: pulse };
+  scene.add(pulse);
+  walkHighlights.push(pulse);
+  // Distance-based coloring
+  const distColors = {0: 0xffd700, 1: 0x00E5FF, 2: 0x4dabf7, 3: 0x9775fa};
+  const clr = distColors[step.distance] || 0xffffff;
+  m.material.emissive = new THREE.Color(clr);
+  m.material.emissiveIntensity = 1.5;
+  // Reset after 2.5s
+  setTimeout(() => {
+    m.material.emissive = new THREE.Color(entry.data.color);
+    m.material.emissiveIntensity = 0.55;
+  }, 2500);
+}
+
+function drawWalkTrail(fromId, toId) {
+  const a = nodeMap[fromId], b = nodeMap[toId];
+  if (!a || !b) return;
+  const geo = new THREE.BufferGeometry().setFromPoints([a.three.position, b.three.position]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+    color: 0xffd700, transparent: true, opacity: 0.8,
+    blending: THREE.AdditiveBlending, linewidth: 1
+  }));
+  scene.add(line);
+  walkTrails.push(line);
+  // Fade trail after 4s
+  setTimeout(() => {
+    line.material.opacity = 0;
+    setTimeout(() => { scene.remove(line); }, 800);
+  }, 4000);
+}
+
+function clearWalk() {
+  walkHighlights.forEach(p => {
+    scene.remove(p);
+    if (p.geometry) p.geometry.dispose();
+  });
+  walkHighlights = [];
+  walkTrails.forEach(l => {
+    scene.remove(l);
+    if (l.geometry) l.geometry.dispose();
+  });
+  walkTrails = [];
+  // Reset all node emissives
+  for (const id in nodeMap) {
+    const m = nodeMap[id].three;
+    m.material.emissive = new THREE.Color(nodeMap[id].data.color);
+    m.material.emissiveIntensity = 0.55;
   }
 }
 function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
