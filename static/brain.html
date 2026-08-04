@@ -6,7 +6,7 @@
 <title>NEURAL_MESH Brain — live agentic memory mesh · v0.21.0</title>
 <meta name="description" content="NEURAL_MESH — a self-organizing, self-forgetting agentic memory mesh for AI agents. Typed memory, mesh topology, resonance retrieval, hot/cold lanes, sleep/prune, versioned truth. Live 3D brain.">
 <link rel="canonical" href="https://api.d0xeddev.com/brain">
-<meta name="theme-color" content="#08090a">
+<meta name="theme-color" content="#000818">
 <meta name="robots" content="index,follow">
 <link rel="icon" type="image/png" href="/brain/favicon.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -27,75 +27,69 @@
 <meta name="twitter:description" content="Self-organizing · self-forgetting memory for AI agents. Typed lanes, resonance retrieval, versioned truth, Rust hot path. Drag the live brain.">
 <meta name="twitter:image" content="https://api.d0xeddev.com/brain/og.png">
 <meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.21.0">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;510;590&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:#08090a; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
-canvas { display:block; position:fixed; top:0; left:0; z-index:1; touch-action:none; }
-#hud { position:fixed; top:0; left:0; right:0; z-index:10; pointer-events:none; padding:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem; }
-#hud > * { pointer-events:auto; }
-.brand { display:flex; align-items:center; gap:0.6rem; }
-.brand h1 { font-size:1.1rem; font-weight:590; color:#f7f8f8; letter-spacing:-0.02em; }
-.brand .ver { font-size:0.7rem; color:#8a8f98; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(255,255,255,0.04); padding:2px 8px; border-radius:4px; }
-.brand .repolink { font-size:0.7rem; color:#4dabf7; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(77,171,247,0.08); border:1px solid rgba(77,171,247,0.28); padding:2px 8px; border-radius:4px; text-decoration:none; }
-.brand .repolink:hover { background:rgba(77,171,247,0.18); }
-.hud-card { background:rgba(15,16,17,0.92); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:0.8rem 1rem; backdrop-filter:blur(12px); }
-.hud-card .label { font-size:0.65rem; color:#62666d; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.2rem; }
-.hud-card .value { font-size:1.4rem; font-weight:590; color:#f7f8f8; }
-.hud-card .sub { font-size:0.7rem; color:#8a8f98; margin-top:0.15rem; }
-#stats-grid { display:flex; gap:0.6rem; flex-wrap:wrap; }
-#legend { position:fixed; bottom:1.5rem; left:1.5rem; z-index:10; display:flex; gap:1rem; flex-wrap:wrap; }
-.legend-item { display:flex; align-items:center; gap:0.4rem; font-size:0.7rem; color:#8a8f98; background:rgba(15,16,17,0.85); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:0.35rem 0.7rem; backdrop-filter:blur(8px); }
-.legend-dot { width:8px; height:8px; border-radius:50%; }
-.legend-dot.hot { background:#ff6b35; box-shadow:0 0 6px #ff6b35; }
-.legend-dot.cold { background:#4dabf7; box-shadow:0 0 6px #4dabf7; }
-.legend-dot.dream { background:#9775fa; box-shadow:0 0 6px #9775fa; }
-#tooltip { position:fixed; z-index:20; pointer-events:none; background:rgba(25,26,27,0.96); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:0.6rem 0.8rem; font-size:0.72rem; max-width:280px; display:none; backdrop-filter:blur(16px); line-height:1.4; }
-#tooltip .tt-id { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#62666d; }
-#tooltip .tt-content { color:#d0d6e0; margin-top:0.25rem; }
-#tooltip .tt-meta { color:#8a8f98; font-size:0.65rem; margin-top:0.2rem; }
-.instructions { position:fixed; bottom:1.5rem; right:1.5rem; z-index:10; font-size:0.65rem; color:#62666d; background:rgba(15,16,17,0.7); padding:0.4rem 0.7rem; border-radius:6px; }
-#mobile-detail { display:none; position:fixed; left:0.75rem; right:0.75rem; bottom:4rem; z-index:30; background:rgba(25,26,27,0.97); border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:0.8rem 2.4rem 0.8rem 0.9rem; font-size:0.75rem; line-height:1.45; backdrop-filter:blur(16px); box-shadow:0 12px 36px rgba(0,0,0,0.45); }
-#mobile-detail.open { display:block; }
-#mobile-detail-close { position:absolute; top:0.45rem; right:0.55rem; width:32px; height:32px; border:1px solid rgba(255,255,255,0.1); border-radius:50%; background:rgba(255,255,255,0.04); color:#d0d6e0; font-size:1rem; }
-@media (max-width: 700px) {
-  #hud { padding:0.7rem; gap:0.55rem; }
-  .brand { width:100%; justify-content:space-between; }
-  .brand h1 { font-size:0.9rem; }
-  #stats-grid { width:100%; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.35rem; }
-  .hud-card { padding:0.5rem 0.35rem; border-radius:7px; text-align:center; }
-  .hud-card .label { font-size:0.48rem; white-space:nowrap; }
-  .hud-card .value { font-size:0.95rem; }
-  #legend { left:0.65rem; right:0.65rem; bottom:0.65rem; gap:0.3rem; justify-content:center; }
-  .legend-item { font-size:0.55rem; padding:0.3rem 0.45rem; }
-  .instructions { right:0.65rem; left:0.65rem; bottom:2.9rem; text-align:center; font-size:0.55rem; }
-  #tooltip { display:none !important; }
-}
-@media (max-height: 560px) and (orientation: landscape) {
-  #hud { padding:0.5rem; }
-  .brand h1 { font-size:0.8rem; }
-  #stats-grid { margin-left:auto; width:auto; display:flex; }
-  .hud-card { min-width:62px; padding:0.35rem; }
-  #legend { bottom:0.4rem; left:0.4rem; }
-  .instructions { display:none; }
-}
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000818; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
+  canvas { display:block; position:fixed; top:0; left:0; z-index:1; touch-action:none; }
+  #hud { position:fixed; top:0; left:0; right:0; z-index:10; pointer-events:none; padding:1.5rem; display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.75rem; }
+  #hud > * { pointer-events:auto; }
+  .brand { display:flex; align-items:center; gap:0.6rem; }
+  .brand h1 { font-size:1.1rem; font-weight:590; color:#f7f8f8; letter-spacing:-0.02em; }
+  .brand .ver { font-size:0.7rem; color:#8a8f98; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(255,255,255,0.04); padding:2px 8px; border-radius:4px; }
+  .brand .repolink { font-size:0.7rem; color:#4dabf7; font-family:'JetBrains Mono',ui-monospace,monospace; background:rgba(77,171,247,0.08); border:1px solid rgba(77,171,247,0.28); padding:2px 8px; border-radius:4px; text-decoration:none; }
+  .brand .repolink:hover { background:rgba(77,171,247,0.18); }
+  .hud-card { background:rgba(8,12,32,0.9); border:1px solid rgba(0,229,255,0.15); border-radius:10px; padding:0.8rem 1rem; backdrop-filter:blur(12px); }
+  .hud-card .label { font-size:0.65rem; color:#62666d; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.2rem; }
+  .hud-card .value { font-size:1.4rem; font-weight:590; color:#f7f8f8; }
+  .hud-card .sub { font-size:0.7rem; color:#8a8f98; margin-top:0.15rem; }
+  #stats-grid { display:flex; gap:0.6rem; flex-wrap:wrap; }
+  #legend { position:fixed; bottom:1.5rem; left:1.5rem; z-index:10; display:flex; gap:1rem; flex-wrap:wrap; }
+  .legend-item { display:flex; align-items:center; gap:0.4rem; font-size:0.7rem; color:#8a8f98; background:rgba(8,12,32,0.85); border:1px solid rgba(0,229,255,0.1); border-radius:6px; padding:0.35rem 0.7rem; backdrop-filter:blur(8px); }
+  .legend-dot { width:8px; height:8px; border-radius:50%; }
+  .legend-dot.hot { background:#ff6b35; box-shadow:0 0 6px #ff6b35; }
+  .legend-dot.cold { background:#4dabf7; box-shadow:0 0 6px #4dabf7; }
+  .legend-dot.dream { background:#9775fa; box-shadow:0 0 6px #9775fa; }
+  #tooltip { position:fixed; z-index:20; pointer-events:none; background:rgba(10,14,40,0.96); border:1px solid rgba(0,229,255,0.25); border-radius:8px; padding:0.6rem 0.8rem; font-size:0.72rem; max-width:280px; display:none; backdrop-filter:blur(16px); line-height:1.4; box-shadow:0 0 20px rgba(0,229,255,0.15); }
+  #tooltip .tt-id { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#00E5FF; }
+  #tooltip .tt-content { color:#d0d6e0; margin-top:0.25rem; }
+  #tooltip .tt-meta { color:#8a8f98; font-size:0.65rem; margin-top:0.2rem; }
+  #brain-badge { position:fixed; top:20px; right:20px; z-index:10; color:rgba(0,229,255,0.7); font-size:10px; letter-spacing:3px; text-align:right; pointer-events:none; font-family:'JetBrains Mono',monospace; }
+  .instructions { position:fixed; bottom:1.5rem; right:1.5rem; z-index:10; font-size:0.65rem; color:#62666d; background:rgba(8,12,32,0.7); padding:0.4rem 0.7rem; border-radius:6px; border:1px solid rgba(0,229,255,0.08); }
+  #mobile-detail { display:none; position:fixed; left:0.75rem; right:0.75rem; bottom:4rem; z-index:30; background:rgba(10,14,40,0.97); border:1px solid rgba(0,229,255,0.25); border-radius:12px; padding:0.8rem 2.4rem 0.8rem 0.9rem; font-size:0.75rem; line-height:1.45; backdrop-filter:blur(16px); box-shadow:0 12px 36px rgba(0,0,0,0.45); }
+  #mobile-detail.open { display:block; }
+  #mobile-detail-close { position:absolute; top:0.45rem; right:0.55rem; width:32px; height:32px; border:1px solid rgba(0,229,255,0.2); border-radius:50%; background:rgba(255,255,255,0.04); color:#d0d6e0; font-size:1rem; }
+  @media (max-width: 700px) {
+    #hud { padding:0.7rem; gap:0.55rem; }
+    .brand { width:100%; justify-content:space-between; }
+    .brand h1 { font-size:0.9rem; }
+    #stats-grid { width:100%; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:0.35rem; }
+    .hud-card { padding:0.5rem 0.35rem; border-radius:7px; text-align:center; }
+    .hud-card .label { font-size:0.48rem; white-space:nowrap; }
+    .hud-card .value { font-size:0.95rem; }
+    #legend { left:0.65rem; right:0.65rem; bottom:0.65rem; gap:0.3rem; justify-content:center; }
+    .legend-item { font-size:0.55rem; padding:0.3rem 0.45rem; }
+    .instructions { right:0.65rem; left:0.65rem; bottom:2.9rem; text-align:center; font-size:0.55rem; }
+    #tooltip { display:none !important; }
+  }
 </style>
 </head>
 <body>
 
 <div id="hud">
   <div class="brand">
-    <h1>🧠 NEURAL_MESH BRAIN</h1>
+    <h1>NEURAL_MESH</h1>
     <span class="ver" id="version">v0.21.0</span>
-    <a class="repolink" href="https://github.com/BasedNUKEM/NEURAL_MESH" target="_blank" rel="noopener" title="Source code on GitHub">◈ repo</a>
+    <a class="repolink" href="https://github.com/BasedNUKEM/NEURAL_MESH" target="_blank" rel="noopener">github ↗</a>
   </div>
   <div id="stats-grid">
-    <div class="hud-card"><div class="label">Nodes</div><div class="value" id="nodes-val">—</div></div>
-    <div class="hud-card"><div class="label">Hot Lane</div><div class="value" id="hot-val">—</div></div>
-    <div class="hud-card"><div class="label">Cold Lane</div><div class="value" id="cold-val">—</div></div>
-    <div class="hud-card"><div class="label">Linked Pairs</div><div class="value" id="links-val">—</div></div>
+    <div class="hud-card"><div class="label">Nodes</div><div class="value" id="nodes-val">—</div><div class="sub">active mesh</div></div>
+    <div class="hud-card"><div class="label">Hot</div><div class="value" id="hot-val">—</div><div class="sub">lane</div></div>
+    <div class="hud-card"><div class="label">Cold</div><div class="value" id="cold-val">—</div><div class="sub">lane</div></div>
+    <div class="hud-card"><div class="label">Links</div><div class="value" id="links-val">—</div><div class="sub">mesh edges</div></div>
   </div>
 </div>
+
+<div id="brain-badge">NEURAL_MESH ▸ CRYSTAL</div>
 
 <div id="legend">
   <div class="legend-item"><span class="legend-dot hot"></span> Hot Lane</div>
@@ -108,16 +102,38 @@ canvas { display:block; position:fixed; top:0; left:0; z-index:1; touch-action:n
   <button id="mobile-detail-close" aria-label="Close node details" onclick="closeMobileDetail()">×</button>
   <div id="mobile-detail-body"></div>
 </div>
-<div class="instructions"><span class="desktop-help">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes</span><span class="mobile-help" style="display:none">☝ drag to orbit &nbsp;|&nbsp; pinch to zoom &nbsp;|&nbsp; tap nodes</span></div>
+<div class="instructions"><span class="desktop-help">🖱 drag to orbit &nbsp;|&nbsp; scroll to zoom &nbsp;|&nbsp; hover nodes &nbsp;|&nbsp; click → energy pulse</span><span class="mobile-help" style="display:none">☝ drag to orbit &nbsp;|&nbsp; pinch to zoom &nbsp;|&nbsp; tap nodes</span></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
-<script>
-p5.disableFriendlyErrors = true;
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
 
-// ── Data layer ──────────────────────────────────────────────────
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── CAPTURE / query flags ──────────────────────
+const CAPTURE = new URLSearchParams(location.search).has('capture');
+if (CAPTURE) {
+  // Hide all UI chrome for clean capture / OG frames
+  ['hud', 'legend', 'brain-badge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  document.querySelector('.instructions').style.display = 'none';
+}
+
+// ── Data layer (real mesh) ─────────────────────
 const API = '/mesh';
 let meshData = { nodes: [], links: [], stats: {} };
-let nodeMap = {};
+let nodeMap = {};       // id -> {three: mesh, data: {...}}
+let linkLines = [];     // THREE.Line objects for mesh links
+let linkGroup = new THREE.Group();
 
 async function fetchMesh() {
   try {
@@ -128,321 +144,428 @@ async function fetchMesh() {
     meshData.stats = statsRes;
     const results = pubRes.results || [];
 
-    // Build node list
-    nodeMap = {};
-    meshData.nodes = results.map((n, i) => {
-      // Position nodes on a Fibonacci sphere for brain-like layout
+    // Lane approximation (public API has no lane field — infer like v1 brain)
+    const laneFor = (i) => i % 3 === 0 ? 'cold' : 'hot';
+    const colorFor = (lane) => lane === 'hot' ? 0xff6b35 : lane === 'cold' ? 0x4dabf7 : 0x9775fa;
+    const seen = new Set();
+    const nodes = results.map((n, i) => {
       const phi = Math.acos(1 - 2*(i+0.5)/Math.max(results.length, 1));
       const theta = Math.PI * (1+Math.sqrt(5)) * i;
-      const r = 180 + Math.random()*20; // slight radial variation
-      const x = r * Math.sin(phi) * Math.cos(theta);
-      const y = r * Math.sin(phi) * Math.sin(theta);
-      const z = r * Math.cos(phi);
-
-      const node = {
-        id: n.id,
-        content: n.content || '',
-        type: n.type || 'semantic',
-        provenance: n.provenance || 'unknown',
-        trust: Number(n.trust || 1.0),
-        lane: n.lane || (i % 3 === 0 ? 'cold' : 'hot'), // approximate
-        helixa: n.helixa || null,
-        by: n.by || 'unknown',
-        tx: x, ty: y, tz: z, // target position
-        x: 0, y: 0, z: 0,    // current (animated)
-        size: 4 + (Number(n.trust || 1.0) * 4),
-        glow: 0,
-        pulse: Math.random() * Math.PI * 2
+      const r = 1.9 + Math.random()*1.6;
+      return {
+        id: n.id, content: n.content || '', type: n.type || 'semantic',
+        provenance: n.provenance || 'unknown', trust: Number(n.trust || 1.0),
+        lane: n.lane || laneFor(i), helixa: n.helixa || null, by: n.by || 'unknown',
+        x: r * Math.sin(phi) * Math.cos(theta),
+        y: r * Math.sin(phi) * Math.sin(theta) * 0.8,
+        z: r * Math.cos(phi),
+        size: 0.04 + (Number(n.trust || 1.0) * 0.05),
+        color: colorFor(n.lane || laneFor(i))
       };
-      nodeMap[n.id] = node;
-      return node;
     });
+    nodeMap = {};
+    meshData.nodes = nodes;
 
-    // Build links from mesh proximity (pairs that share provenance or helixa)
+    // Links: shared provenance / helixa / same-lane high-trust
     meshData.links = [];
-    const seen = new Set();
-    for (let i = 0; i < meshData.nodes.length; i++) {
-      for (let j = i+1; j < meshData.nodes.length; j++) {
-        const a = meshData.nodes[i], b = meshData.nodes[j];
+    const seenL = new Set();
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i+1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
         const key = a.id+':'+b.id;
-        if (seen.has(key)) continue;
-
+        if (seenL.has(key)) continue;
         let strength = 0;
         if (a.provenance === b.provenance && a.provenance !== 'unknown') strength = 0.6;
         if (a.helixa && b.helixa && a.helixa === b.helixa) strength = 0.9;
         if (a.lane === b.lane && a.trust > 0.7 && b.trust > 0.7) strength = Math.max(strength, 0.4);
-
-        if (strength > 0.3) {
-          seen.add(key);
-          meshData.links.push({ a: a.id, b: b.id, strength });
-        }
+        if (strength > 0.3) { seenL.add(key); meshData.links.push({ a: a.id, b: b.id, strength }); }
       }
     }
 
     // Update HUD
-    document.getElementById('nodes-val').textContent = meshData.nodes.length;
-    document.getElementById('hot-val').textContent = meshData.nodes.filter(n=>n.lane==='hot').length;
-    document.getElementById('cold-val').textContent = meshData.nodes.filter(n=>n.lane==='cold').length;
+    document.getElementById('nodes-val').textContent = nodes.length;
+    document.getElementById('hot-val').textContent = nodes.filter(n=>n.lane==='hot').length;
+    document.getElementById('cold-val').textContent = nodes.filter(n=>n.lane==='cold').length;
     document.getElementById('links-val').textContent = meshData.links.length;
-    document.getElementById('version').textContent = 'v'+statsRes.version;
+    document.getElementById('version').textContent = 'v'+(statsRes.version||'0.21.0');
 
+    buildMeshVisuals();
   } catch(e) {
     console.warn('Mesh fetch:', e.message);
   }
 }
 
-// ── p5.js 3D Brain ──────────────────────────────────────────────
-let camTheta = 0, camPhi = 0.6, camDist = 500;
-let targetTheta = 0, targetPhi = 0.6, targetDist = 500;
-let hoveredNode = null;
-let tappedNode = null;
-let particles = [];
-let lastFetch = 0;
-let lastTouchDistance = 0;
-let lastTouchX = 0, lastTouchY = 0, touchMovedFar = false;
-const isMobile = () => window.matchMedia('(max-width: 700px), (pointer: coarse)').matches;
-
-function setup() {
-  const c = createCanvas(windowWidth, windowHeight, WEBGL);
-  c.position(0,0);
-  c.style('position','fixed');
-  c.style('top','0');
-  c.style('left','0');
-  pixelDensity(1);
-  colorMode(HSB, 360, 100, 100, 100);
-  noStroke();
-  if (isMobile()) {
-    targetDist = windowWidth < 430 ? 630 : 560;
-    document.querySelector('.desktop-help').style.display = 'none';
-    document.querySelector('.mobile-help').style.display = 'inline';
+// Rebuild 3D visuals for mesh nodes + links
+function buildMeshVisuals() {
+  // Remove old mesh nodes
+  while (meshGroup.children.length) meshGroup.remove(meshGroup.children[0]);
+  nodeMap = {};
+  for (const n of meshData.nodes) {
+    const geo = new THREE.SphereGeometry(n.size, 16, 16);
+    const mat = new THREE.MeshPhongMaterial({
+      color: n.color, emissive: n.color, emissiveIntensity: 0.55,
+      shininess: 60, specular: 0xffffff
+    });
+    const sphere = new THREE.Mesh(geo, mat);
+    sphere.position.set(n.x, n.y, n.z);
+    sphere.userData = { nodeId: n.id, phase: Math.random()*Math.PI*2, basePos: new THREE.Vector3(n.x, n.y, n.z) };
+    meshGroup.add(sphere);
+    nodeMap[n.id] = { three: sphere, data: n };
   }
+  // Links
+  while (linkGroup.children.length) linkGroup.remove(linkGroup.children[0]);
+  linkLines = [];
+  for (const l of meshData.links) {
+    const a = nodeMap[l.a], b = nodeMap[l.b];
+    if (!a || !b) continue;
+    const geo = new THREE.BufferGeometry().setFromPoints([a.three.position, b.three.position]);
+    const mat = new THREE.LineBasicMaterial({ color: 0x00E5FF, transparent: true, opacity: 0.12 + l.strength*0.15, blending: THREE.AdditiveBlending });
+    const line = new THREE.Line(geo, mat);
+    linkGroup.add(line);
+    linkLines.push(line);
+  }
+  // Fire arrival pulses
+  for (let i = 0; i < Math.min(meshData.nodes.length, 8); i++) {
+    const n = meshData.nodes[Math.floor(Math.random()*meshData.nodes.length)];
+    firePulse(new THREE.Vector3(n.x, n.y, n.z));
+  }
+}
 
-  fetchMesh().then(() => {
-    // init node positions to targets
-    for (let n of meshData.nodes) { n.x=n.tx; n.y=n.ty; n.z=n.tz; }
-    for (let i=0; i<Math.min(meshData.links.length*2, 200); i++) {
-      particles.push(spawnParticle());
+// ── Theme ───────────────────────────────────────
+const THEMES = [
+  { bg: 0x000818, accent: 0x00E5FF, accent2: 0xff00aa, accent3: 0xffd700, name: 'CRYSTAL' },
+  { bg: 0x0a001a, accent: 0xa855f7, accent2: 0xec4899, accent3: 0x818cf8, name: 'NEBULA' },
+  { bg: 0x1a0a00, accent: 0xf97316, accent2: 0xef4444, accent3: 0xfbbf24, name: 'SUNSET' },
+  { bg: 0x001020, accent: 0x22d3ee, accent2: 0x06b6d4, accent3: 0x67e8f9, name: 'OCEAN' },
+];
+let T = THEMES[0];
+let frozen = false;
+let pulseWaves = [];
+
+// ─── CIRCUIT TEXTURE ────────────────────────────
+function makeCircuitTexture(size, accentHex, alpha) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = `rgba(0,10,40,${alpha})`;
+  ctx.fillRect(0, 0, size, size);
+  const bs = size / 8;
+  ctx.strokeStyle = 'rgba(0,229,255,0.12)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < size; x += bs)
+    for (let y = 0; y < size; y += bs)
+      ctx.strokeRect(x+1, y+1, bs-2, bs-2);
+  ctx.strokeStyle = accentHex;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 18; i++) {
+    let y = Math.random() * size;
+    ctx.beginPath(); ctx.moveTo(0, y); let x = 0;
+    while (x < size * 0.95) {
+      const seg = 20 + Math.random() * 80; x += seg; ctx.lineTo(x, y);
+      if (Math.random() < 0.25) { const t = (Math.random()-0.5)*40; ctx.lineTo(x, y+t); y += t; }
     }
+    ctx.stroke();
+  }
+  for (let i = 0; i < 12; i++) {
+    let x = Math.random() * size; ctx.beginPath(); ctx.moveTo(x, 0); let y = 0;
+    while (y < size * 0.95) {
+      const seg = 15 + Math.random() * 60; y += seg; ctx.lineTo(x, y);
+      if (Math.random() < 0.2) { const t = (Math.random()-0.5)*30; ctx.lineTo(x+t, y); x += t; }
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = accentHex;
+  for (let i = 0; i < 50; i++) { ctx.beginPath(); ctx.arc(Math.random()*size, Math.random()*size, 1.5+Math.random()*2.5, 0, Math.PI*2); ctx.fill(); }
+  return new THREE.CanvasTexture(c);
+}
+
+// ─── SCENE ──────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(T.bg);
+scene.fog = new THREE.FogExp2(T.bg, 0.00008);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.3, 100);
+camera.position.set(4, 1.5, 6.5);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ReinhardToneMapping;
+renderer.toneMappingExposure = 1.4;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.25;
+controls.minDistance = 2.5;
+controls.maxDistance = 18;
+if (CAPTURE) controls.autoRotate = false;
+
+// Lights
+scene.add(new THREE.AmbientLight(0x112244, 0.8));
+const light1 = new THREE.PointLight(0x00E5FF, 5, 30); light1.position.set(5,5,5); scene.add(light1);
+const light2 = new THREE.PointLight(0xff00aa, 3.5, 25); light2.position.set(-5,-2,-3); scene.add(light2);
+const light3 = new THREE.PointLight(0xffd700, 2, 18); light3.position.set(0,-4,6); scene.add(light3);
+
+// Starfield
+const starsGeo = new THREE.BufferGeometry();
+const starCount = 4000;
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  const r = 15 + Math.random() * 45;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  starPos[i*3] = r * Math.sin(phi) * Math.cos(theta);
+  starPos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+  starPos[i*3+2] = r * Math.cos(phi);
+}
+starsGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const stars = new THREE.Points(starsGeo, new THREE.PointsMaterial({
+  size: 0.04, color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending
+}));
+scene.add(stars);
+
+// ─── CUBE BRAIN ─────────────────────────────────
+const brainGroup = new THREE.Group();
+scene.add(brainGroup);
+const cubeSize = 2.2;
+let circuitTex = makeCircuitTexture(1024, 'rgba(0,229,255,0.8)', 0.3);
+circuitTex.wrapS = circuitTex.wrapT = THREE.RepeatWrapping;
+const faceMats = [];
+for (let i = 0; i < 6; i++) {
+  faceMats.push(new THREE.MeshPhongMaterial({
+    map: circuitTex, color: 0x00E5FF, emissive: 0x003366, emissiveIntensity: 0.4,
+    transparent: true, opacity: 0.45, shininess: 10, specular: 0x00aacc,
+  }));
+}
+const cube = new THREE.Mesh(new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize), faceMats);
+brainGroup.add(cube);
+
+// Edge glow
+function makeEdgeGlow(size, color) {
+  const group = new THREE.Group();
+  const h = size / 2;
+  const edges = [
+    [[-h,-h,h],[-h,h,h]],[[h,-h,h],[h,h,h]],[[-h,-h,-h],[-h,h,-h]],[[h,-h,-h],[h,h,-h]],
+    [[-h,h,-h],[-h,h,h]],[[h,h,-h],[h,h,h]],[[-h,h,-h],[h,h,-h]],[[-h,h,h],[h,h,h]],
+    [[-h,-h,-h],[-h,-h,h]],[[h,-h,-h],[h,-h,h]],[[-h,-h,-h],[h,-h,-h]],[[-h,-h,h],[h,-h,h]],
+  ];
+  edges.forEach(([a,b]) => {
+    const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]);
+    group.add(new THREE.Line(g, new THREE.LineBasicMaterial({color, transparent:true, opacity:0.7, blending:THREE.AdditiveBlending})));
+    const aa = new THREE.Vector3(...a).multiplyScalar(1.015);
+    const bb = new THREE.Vector3(...b).multiplyScalar(1.015);
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([aa,bb]), new THREE.LineBasicMaterial({color, transparent:true, opacity:0.25, blending:THREE.AdditiveBlending})));
   });
+  return group;
 }
+const edgeGlow = makeEdgeGlow(cubeSize, T.accent);
+brainGroup.add(edgeGlow);
 
-function draw() {
-  // Auto-refresh every 30s
-  if (millis() - lastFetch > 30000) { lastFetch = millis(); fetchMesh().then(()=>{
-    for (let i=0; i<Math.min(meshData.links.length*2,200); i++) {
-      if (particles.length<200) particles.push(spawnParticle());
+// Internal circuit lines
+const circuitLines = new THREE.Group();
+for (let i = 0; i < 60; i++) {
+  const v = new THREE.Vector3((Math.random()-0.5)*cubeSize*0.9, (Math.random()-0.5)*cubeSize*0.9, (Math.random()-0.5)*cubeSize*0.9);
+  const end = v.clone().add(new THREE.Vector3((Math.random()-0.5)*1.8, (Math.random()-0.5)*1.8, (Math.random()-0.5)*1.8));
+  circuitLines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([v, end]), new THREE.LineBasicMaterial({color:T.accent, transparent:true, opacity:0.2+Math.random()*0.25, blending:THREE.AdditiveBlending})));
+}
+brainGroup.add(circuitLines);
+
+// Surface nodes
+const nodeGroup = new THREE.Group();
+const surfaceNodes = [];
+for (let i = 0; i < 100; i++) {
+  const face = Math.floor(Math.random() * 6);
+  const s = cubeSize / 2 * 1.005;
+  const u = (Math.random()-0.5)*(cubeSize-0.2);
+  const v = (Math.random()-0.5)*(cubeSize-0.2);
+  let pos;
+  switch(face) {
+    case 0: pos = new THREE.Vector3(u, v, s); break;
+    case 1: pos = new THREE.Vector3(u, v, -s); break;
+    case 2: pos = new THREE.Vector3(s, u, v); break;
+    case 3: pos = new THREE.Vector3(-s, u, v); break;
+    case 4: pos = new THREE.Vector3(u, s, v); break;
+    case 5: pos = new THREE.Vector3(u, -s, v); break;
+  }
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), new THREE.MeshBasicMaterial({color:T.accent, blending:THREE.AdditiveBlending}));
+  dot.position.copy(pos);
+  dot.userData = { basePos: pos.clone(), phase: Math.random()*Math.PI*2 };
+  surfaceNodes.push(dot);
+  nodeGroup.add(dot);
+}
+brainGroup.add(nodeGroup);
+
+// ─── HELIX LADDERS ──────────────────────────────
+const helixGroup = new THREE.Group();
+scene.add(helixGroup);
+function makeHelixLadder(radius, height, turns, color, segments) {
+  const group = new THREE.Group();
+  const pts1 = [], pts2 = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = (i/segments) * Math.PI * 2 * turns;
+    const y = (i/segments) * height - height/2;
+    pts1.push(new THREE.Vector3(Math.cos(t)*radius, y, Math.sin(t)*radius));
+    pts2.push(new THREE.Vector3(Math.cos(t+Math.PI)*radius*0.85, y, Math.sin(t+Math.PI)*radius*0.85));
+  }
+  const mat = new THREE.LineBasicMaterial({color, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending});
+  group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts1), mat));
+  group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts2), mat));
+  const rungMat = new THREE.LineBasicMaterial({color, transparent:true, opacity:0.2, blending:THREE.AdditiveBlending});
+  for (let i = 0; i < pts1.length; i += 8)
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pts1[i], pts2[i]]), rungMat));
+  return group;
+}
+const ladder1 = makeHelixLadder(1.85, 3.5, 4.5, T.accent2, 400);
+helixGroup.add(ladder1);
+const ladder2 = makeHelixLadder(2.1, 3.8, 4.5, T.accent, 400);
+ladder2.rotation.y = Math.PI / 2;
+helixGroup.add(ladder2);
+
+function makeOrbitRing(radius, color, tiltX, tiltZ) {
+  const pts = [];
+  for (let i = 0; i <= 400; i++) {
+    const a = (i/400) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a)*radius, Math.sin(a)*radius*0.12, 0));
+  }
+  const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({color, transparent:true, opacity:0.45, blending:THREE.AdditiveBlending}));
+  ring.rotation.x = tiltX; ring.rotation.z = tiltZ;
+  ring.userData = { sx: (Math.random()-0.5)*0.4, sz: (Math.random()-0.5)*0.4 };
+  return ring;
+}
+const rings = [
+  makeOrbitRing(2.5, T.accent, Math.PI/3, 0),
+  makeOrbitRing(2.6, T.accent2, -Math.PI/4, Math.PI/5),
+  makeOrbitRing(2.7, T.accent3, 0, Math.PI/6),
+  makeOrbitRing(2.4, T.accent, -Math.PI/6, -Math.PI/8),
+];
+rings.forEach(r => helixGroup.add(r));
+
+// ─── MESH NODES GROUP (real data) ───────────────
+const meshGroup = new THREE.Group();
+scene.add(meshGroup);
+scene.add(linkGroup);
+
+// ─── PULSES ─────────────────────────────────────
+function firePulse(origin) {
+  const pulse = new THREE.Mesh(
+    new THREE.RingGeometry(0.03, 0.12, 32),
+    new THREE.MeshBasicMaterial({color:T.accent, side:THREE.DoubleSide, transparent:true, opacity:1, blending:THREE.AdditiveBlending})
+  );
+  pulse.position.copy(origin);
+  pulse.userData = { scale: 0.05, speed: 0.1, opacity: 1 };
+  scene.add(pulse);
+  pulseWaves.push(pulse);
+}
+window.firePulse = firePulse;
+
+// Click → pulse at that point
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let hovered = null;
+function onPointerMove(e) {
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(meshGroup.children);
+  const tt = document.getElementById('tooltip');
+  if (hits.length) {
+    const h = hits[0].object;
+    const node = nodeMap[h.userData.nodeId];
+    if (node && node.data) {
+      const d = node.data;
+      tt.style.display = 'block';
+      tt.innerHTML = `<div class="tt-id">#${d.id}</div><div class="tt-content">${escapeHtml(d.content.slice(0, 140))}</div><div class="tt-meta">${d.lane} lane · trust ${d.trust} · ${d.provenance}</div>`;
+      tt.style.left = (e.clientX + 14) + 'px';
+      tt.style.top = (e.clientY + 14) + 'px';
+      hovered = h;
+      document.body.style.cursor = 'pointer';
+      return;
     }
-  }); }
-
-  // Smooth camera
-  camTheta += (targetTheta - camTheta)*0.05;
-  camPhi += (targetPhi - camPhi)*0.05;
-  camDist += (targetDist - camDist)*0.08;
-
-  background(8,9,10);
-
-  // Ambient starfield
-  push();
-  translate(0,0,-300);
-  for (let i=0; i<60; i++) {
-    let sx = ((i*137.5)%width)-width/2;
-    let sy = ((i*271.8)%height)-height/2;
-    let sz = ((i*73.1)%400)-200;
-    let flicker = 20+10*sin(millis()*0.001+i);
-    fill(220,10,flicker, 30);
-    ellipse(sx,sy,1.5,1.5);
   }
-  pop();
-
-  // Camera
-  let cx = camDist * sin(camPhi) * cos(camTheta);
-  let cy = camDist * sin(camPhi) * sin(camTheta);
-  let cz = camDist * cos(camPhi);
-  camera(cx, cy, cz, 0, 0, 0, 0, 1, 0);
-
-  // Ambient light
-  ambientLight(220,5,8);
-
-  // Draw connections
-  for (let link of meshData.links) {
-    let a = nodeMap[link.a], b = nodeMap[link.b];
-    if (!a || !b) continue;
-    let alpha = map(link.strength,0.3,1,15,50);
-    let hue = a.lane==='hot'&&b.lane==='hot' ? 18 : a.lane==='cold'&&b.lane==='cold' ? 205 : 260;
-    strokeWeight(0.5);
-    stroke(hue, 60, 80, alpha);
-    line(a.x, a.y, a.z, b.x, b.y, b.z);
+  tt.style.display = 'none';
+  hovered = null;
+  document.body.style.cursor = 'default';
+}
+function onPointerDown(e) {
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(meshGroup.children);
+  if (hits.length) firePulse(hits[0].object.position.clone());
+  else {
+    const v = new THREE.Vector3(pointer.x, pointer.y, 0.5).unproject(camera);
+    const dir = v.sub(camera.position).normalize();
+    firePulse(camera.position.clone().add(dir.multiplyScalar(4)));
   }
+}
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+window.addEventListener('pointermove', onPointerMove, { passive: true });
+window.addEventListener('pointerdown', onPointerDown, { passive: true });
+window.closeMobileDetail = () => document.getElementById('mobile-detail').classList.remove('open');
 
-  // Particles along links
-  noStroke();
-  for (let p of particles) {
-    let link = meshData.links[p.linkIdx];
-    if (!link) { p = spawnParticle(); continue; }
-    let a = nodeMap[link.a], b = nodeMap[link.b];
-    if (!a || !b) continue;
-    p.t += 0.003 * (0.5+p.speed);
-    if (p.t > 1) { Object.assign(p, spawnParticle()); continue; }
-    let px = lerp(a.x, b.x, p.t);
-    let py = lerp(a.y, b.y, p.t);
-    let pz = lerp(a.z, b.z, p.t);
-    let hue = a.lane==='hot' ? 18 : a.lane==='cold' ? 205 : 260;
-    fill(hue, 40, 95, 70);
-    push(); translate(px, py, pz); sphere(1.2); pop();
-  }
-
-  // Hover detection ray
-  hoveredNode = null;
-  let closestDist = 30;
-
-  // Draw nodes
-  for (let n of meshData.nodes) {
-    // Animate toward target
-    n.x += (n.tx - n.x)*0.03;
-    n.y += (n.ty - n.y)*0.03;
-    n.z += (n.tz - n.z)*0.03;
-
-    // Pulse
-    n.pulse += 0.02;
-    let pulseScale = 1 + 0.15*sin(n.pulse);
-
-    // Color by lane
-    let hue, sat, bri;
-    if (n.lane === 'hot') { hue=18; sat=85; bri=90; }
-    else if (n.lane === 'cold') { hue=205; sat=70; bri=85; }
-    else { hue=260; sat=60; bri=80; }
-
-    // Trust affects glow
-    let glowAlpha = map(n.trust, 0, 1, 10, 40);
-    n.glow += (glowAlpha - n.glow)*0.1;
-
-    // Outer glow
-    push();
-    translate(n.x, n.y, n.z);
-    fill(hue, sat*0.4, bri*0.3, n.glow*0.3);
-    sphere(n.size * pulseScale * 1.8);
-    pop();
-
-    // Core
-    push();
-    translate(n.x, n.y, n.z);
-    // Specular-like highlight
-    let lightHue = (hue+15)%360;
-    fill(hue, sat, bri, 90);
-    noStroke();
-    sphere(n.size * pulseScale);
-    // Inner bright spot
-    fill(lightHue, sat*0.3, 100, 60);
-    sphere(n.size * pulseScale * 0.45);
-    pop();
-
-    // Hover check (2D projection)
-    let sx = screenX(n.x, n.y, n.z);
-    let sy = screenY(n.x, n.y, n.z);
-    if (sx>0 && sx<width && sy>0 && sy<height) {
-      let d = dist(mouseX, mouseY, sx, sy);
-      if (d < n.size*1.5 && d < closestDist) {
-        closestDist = d;
-        hoveredNode = n;
-      }
+// ─── ANIMATION ──────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const t = performance.now() * 0.001;
+  if (CAPTURE) {
+    const a = t * 0.12;
+    const r = 7.2 - t * 0.12;
+    camera.position.set(Math.cos(a) * r * 0.85, 1.2 + Math.sin(t * 0.35) * 0.8, Math.sin(a) * r * 0.85 + 1.2);
+    camera.lookAt(0, 0, 0);
+    if (Math.floor(t / 1.6) > (window.__lastPulseT || -1)) {
+      window.__lastPulseT = Math.floor(t / 1.6);
+      firePulse(new THREE.Vector3((Math.random()-0.5)*3.4, (Math.random()-0.5)*2.4, (Math.random()-0.5)*3.4));
     }
   }
-
-  // Highlight hovered
-  if (hoveredNode && !isMobile()) {
-    push();
-    translate(hoveredNode.x, hoveredNode.y, hoveredNode.z);
-    stroke(200,10,95,180);
-    strokeWeight(1.5);
-    noFill();
-    sphere(hoveredNode.size*2.2);
-    pop();
-    // Show tooltip
-    let sx = screenX(hoveredNode.x, hoveredNode.y, hoveredNode.z);
-    let sy = screenY(hoveredNode.x, hoveredNode.y, hoveredNode.z);
-    let tip = document.getElementById('tooltip');
-    tip.style.display = 'block';
-    tip.style.left = (sx+20)+'px';
-    tip.style.top = (sy-10)+'px';
-    tip.innerHTML = `
-      <div class="tt-id">${hoveredNode.id.substring(0,16)}…  ·  ${hoveredNode.lane} lane  ·  trust ${hoveredNode.trust.toFixed(2)}</div>
-      <div class="tt-content">${escapeHTML((hoveredNode.content||'').substring(0,180))}</div>
-      <div class="tt-meta">${hoveredNode.provenance} · by ${hoveredNode.by}${hoveredNode.helixa?' · 🟦#'+hoveredNode.helixa:''}</div>
-    `;
-  } else {
-    document.getElementById('tooltip').style.display = 'none';
+  if (!frozen) {
+    surfaceNodes.forEach(n => {
+      const s = 1 + Math.sin(t*2.2 + n.userData.phase) * 0.06;
+      n.position.copy(n.userData.basePos).multiplyScalar(s);
+      n.material.opacity = 0.3 + Math.sin(t*3 + n.userData.phase) * 0.3;
+    });
+    // Real mesh nodes: gentle breathing
+    for (const id in nodeMap) {
+      const m = nodeMap[id].three;
+      m.scale.setScalar(1 + Math.sin(t*2.2 + m.userData.phase)*0.15);
+    }
+    rings.forEach(r => { r.rotation.x += dt * r.userData.sx; r.rotation.z += dt * r.userData.sz; });
+    ladder1.rotation.y += dt * 0.12;
+    ladder2.rotation.y -= dt * 0.1;
+    ladder2.rotation.x += dt * 0.05;
+    brainGroup.rotation.y += dt * 0.12;
+    brainGroup.rotation.x += dt * 0.03;
+    stars.rotation.y += dt * 0.015;
+    stars.rotation.x += dt * 0.003;
+    const breath = 1 + Math.sin(t*1.3)*0.25;
+    light1.intensity = 5 * breath;
+    light2.intensity = 3.5 * breath;
   }
+  pulseWaves = pulseWaves.filter(p => {
+    p.userData.scale += p.userData.speed;
+    p.userData.opacity -= 0.012;
+    if (p.userData.opacity <= 0) { scene.remove(p); return false; }
+    p.scale.setScalar(p.userData.scale);
+    p.material.opacity = p.userData.opacity;
+    return true;
+  });
+  controls.update();
+  renderer.render(scene, camera);
 }
 
-function escapeHTML(s) {
-  return String(s).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-}
-
-function spawnParticle() {
-  if (meshData.links.length===0) return {linkIdx:0, t:random(), speed:random(0.4,1.6)};
-  return {linkIdx:floor(random(meshData.links.length)), t:random(), speed:random(0.3,1.8)};
-}
-
-function mouseDragged() {
-  targetTheta -= (mouseX-pmouseX)*0.005;
-  targetPhi = constrain(targetPhi-(mouseY-pmouseY)*0.005, 0.15, PI-0.15);
-  return false;
-}
-
-function touchStarted() {
-  touchMovedFar = false;
-  if (touches.length === 1) {
-    lastTouchX = touches[0].x;
-    lastTouchY = touches[0].y;
-  } else if (touches.length === 2) {
-    lastTouchDistance = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
-  }
-  return false;
-}
-
-function touchMoved() {
-  if (touches.length === 1) {
-    const dx = touches[0].x-lastTouchX, dy = touches[0].y-lastTouchY;
-    if (abs(dx)+abs(dy) > 3) touchMovedFar = true;
-    targetTheta -= dx * 0.007;
-    targetPhi = constrain(targetPhi - dy * 0.007, 0.15, PI-0.15);
-    lastTouchX = touches[0].x;
-    lastTouchY = touches[0].y;
-  } else if (touches.length === 2) {
-    touchMovedFar = true;
-    const current = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
-    if (lastTouchDistance) targetDist = constrain(targetDist - (current-lastTouchDistance)*1.3, 220, 900);
-    lastTouchDistance = current;
-  }
-  return false;
-}
-
-function touchEnded() {
-  if (isMobile() && !touchMovedFar && hoveredNode) showMobileDetail(hoveredNode);
-  lastTouchDistance = 0;
-  return false;
-}
-
-function showMobileDetail(n) {
-  tappedNode = n;
-  const body = document.getElementById('mobile-detail-body');
-  body.innerHTML = `<div class="tt-id">${escapeHTML(n.id.substring(0,16))}… · ${escapeHTML(n.lane)} lane · trust ${n.trust.toFixed(2)}</div><div class="tt-content">${escapeHTML((n.content||'').substring(0,240))}</div><div class="tt-meta">${escapeHTML(n.provenance)} · by ${escapeHTML(n.by)}${n.helixa?' · 🟦#'+escapeHTML(n.helixa):''}</div>`;
-  document.getElementById('mobile-detail').classList.add('open');
-}
-
-function closeMobileDetail() {
-  tappedNode = null;
-  document.getElementById('mobile-detail').classList.remove('open');
-}
-
-function mouseWheel(e) {
-  targetDist = constrain(targetDist + e.delta*0.5, 200, 900);
-  return false;
-}
-
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-}
+// ─── INIT ───────────────────────────────────────
+fetchMesh();
+setInterval(fetchMesh, 30000); // live refresh every 30s
+animate();
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 </body>
 </html>
