@@ -644,10 +644,11 @@ def peer_manifest():
         lane_counts[n.lane] = lane_counts.get(n.lane, 0) + 1
 
     return jsonify({
-        "mesh_id": "neural-mesh-1",  # stable identity; override per deployment
+        "mesh_id": "neural-mesh-1",
         "version": __version__,
-        "nodes": stats["nodes"],
-        "active_nodes": stats["active_nodes"],
+        "total_nodes": stats["total"],
+        "hot": stats.get("hot", 0),
+        "cold": stats.get("cold", 0),
         "provenance_breakdown": stats.get("provenance_breakdown", prov_counts),
         "lane_breakdown": lane_counts,
         "resonance_backend": stats.get("resonance_backend", "python"),
