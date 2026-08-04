@@ -90,7 +90,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.22.0",
+        "version": "0.23.0",
         "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
@@ -110,8 +110,11 @@ def brain():
 def brain_walk():
     """Associative walk from a seed node — graph traversal for brain animation.
 
-    Body: {node_id, hops?=2, top_n?=15}
-    Returns ordered path of nodes reachable through mesh links (BFS from seed).
+    Body: {node_id, hops?=2, top_n?=15, mode?="bfs"|"resonance"}
+    mode="bfs" (default): BFS through mesh links, ordered by hop distance.
+    mode="resonance": spreading activation from the seed (activation decays
+        through links); returns nodes ranked by activation with a normalized
+        `activation` field (seed=1.0).
     Public read-only — the brain visualization calls this on node click.
     """
     data = request.get_json() or {}
@@ -121,11 +124,42 @@ def brain_walk():
 
     hops = max(1, min(int(data.get("hops", 2)), 4))
     top_n = max(1, min(int(data.get("top_n", 15)), 30))
+    mode = data.get("mode", "bfs")
+    if mode not in {"bfs", "resonance"}:
+        return _json_error("mode must be 'bfs' or 'resonance'", 400)
 
     all_nodes = mesh._load()
     seed = all_nodes.get(node_id)
     if not seed:
         return _json_error("node not found", 404)
+
+    if mode == "resonance":
+        # Spreading activation from the seed node (decay=0.5 per hop).
+        # Reuse the resonance module's exact propagation contract.
+        from neural_mesh.resonance import _spread_python
+        resonance = {node_id: 1.0}
+        resonance = _spread_python(all_nodes, resonance, [seed], hops, 0.5)
+        ranked = sorted(
+            ((nid, act) for nid, act in resonance.items() if nid != node_id),
+            key=lambda x: -x[1],
+        )[:top_n]
+        path = [{"node_id": node_id, "distance": 0,
+                 "content": seed.content[:140],
+                 "lane": seed.lane, "trust": round(seed.trust, 3),
+                 "activation": 1.0}]
+        for nid, act in ranked:
+            n = all_nodes[nid]
+            path.append({"node_id": nid, "distance": hops,  # unknown BFS depth in resonance mode
+                         "content": n.content[:140],
+                         "lane": n.lane, "trust": round(n.trust, 3),
+                         "activation": round(act, 4)})
+        return jsonify({
+            "seed_id": node_id,
+            "path": path,
+            "hops": hops,
+            "mode": "resonance",
+            "total_reachable": len(path),
+        })
 
     visited = {node_id: 0}
     frontier = [seed]
@@ -163,6 +197,7 @@ def brain_walk():
         "seed_id": node_id,
         "path": path,
         "hops": hops,
+        "mode": "bfs",
         "total_reachable": total_reachable,
     })
 
@@ -413,10 +448,10 @@ def stamp():
 @app.route("/mesh/public", methods=["GET"])
 def public_mesh():
     """Public read-only feed for community dashboard. No auth, rate-limited.
-    Query params: q (search), limit (default 10, max 50)"""
+    Query params: q (search), limit (default 10, max 300)"""
     q = request.args.get("q", "")
     try:
-        limit = min(int(request.args.get("limit", 10)), 50)
+        limit = min(int(request.args.get("limit", 10)), 300)
     except ValueError:
         limit = 10
 
@@ -474,7 +509,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.22.0",
+        "version": "0.23.0",
         "provenance_breakdown": provenance_breakdown,
     })
 

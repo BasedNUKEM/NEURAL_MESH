@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEURAL_MESH Brain — live agentic memory mesh · v0.22.0</title>
+<title>NEURAL_MESH Brain — live agentic memory mesh · v0.23.0</title>
 <meta name="description" content="NEURAL_MESH — a self-organizing, self-forgetting agentic memory mesh for AI agents. Typed memory, mesh topology, resonance retrieval, hot/cold lanes, sleep/prune, versioned truth. Live 3D brain.">
 <link rel="canonical" href="https://api.d0xeddev.com/brain">
 <meta name="theme-color" content="#000818">
@@ -20,13 +20,13 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:type" content="image/png">
-<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.22.0">
+<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.23.0">
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="NEURAL_MESH — agentic memory mesh">
 <meta name="twitter:description" content="Self-organizing · self-forgetting memory for AI agents. Typed lanes, resonance retrieval, versioned truth, Rust hot path. Drag the live brain.">
 <meta name="twitter:image" content="https://api.d0xeddev.com/brain/og.png">
-<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.22.0">
+<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.23.0">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#000818; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
@@ -58,6 +58,25 @@
   #mobile-detail { display:none; position:fixed; left:0.75rem; right:0.75rem; bottom:4rem; z-index:30; background:rgba(10,14,40,0.97); border:1px solid rgba(0,229,255,0.25); border-radius:12px; padding:0.8rem 2.4rem 0.8rem 0.9rem; font-size:0.75rem; line-height:1.45; backdrop-filter:blur(16px); box-shadow:0 12px 36px rgba(0,0,0,0.45); }
   #mobile-detail.open { display:block; }
   #mobile-detail-close { position:absolute; top:0.45rem; right:0.55rem; width:32px; height:32px; border:1px solid rgba(0,229,255,0.2); border-radius:50%; background:rgba(255,255,255,0.04); color:#d0d6e0; font-size:1rem; }
+  #search-bar { position:fixed; top:0; left:50%; transform:translateX(-50%); z-index:11; display:flex; gap:0.5rem; align-items:center; margin-top:1.5rem; background:rgba(8,12,32,0.92); border:1px solid rgba(0,229,255,0.2); border-radius:12px; padding:0.5rem 0.6rem 0.5rem 0.9rem; backdrop-filter:blur(14px); box-shadow:0 0 24px rgba(0,229,255,0.12); }
+  #search-bar input { background:transparent; border:none; outline:none; color:#f7f8f8; font-family:'JetBrains Mono',ui-monospace,monospace; font-size:0.78rem; width:220px; }
+  #search-bar input::placeholder { color:#62666d; }
+  #search-bar button { background:rgba(0,229,255,0.14); border:1px solid rgba(0,229,255,0.35); color:#00E5FF; font-family:'JetBrains Mono',monospace; font-size:0.7rem; border-radius:7px; padding:0.3rem 0.7rem; cursor:pointer; }
+  #search-bar button:hover { background:rgba(0,229,255,0.28); }
+  #search-status { position:fixed; top:3.4rem; left:50%; transform:translateX(-50%); z-index:11; font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#8a8f98; background:rgba(8,12,32,0.85); border-radius:6px; padding:0.2rem 0.6rem; display:none; border:1px solid rgba(0,229,255,0.1); }
+  #mode-toggle { position:fixed; top:20px; right:150px; z-index:11; font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#d0d6e0; background:rgba(8,12,32,0.9); border:1px solid rgba(0,229,255,0.25); border-radius:7px; padding:0.3rem 0.6rem; cursor:pointer; }
+  #mode-toggle:hover { background:rgba(0,229,255,0.15); }
+  #mode-toggle .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:0.35rem; vertical-align:middle; }
+  #inspector { position:fixed; top:50%; right:1.5rem; transform:translateY(-50%); z-index:30; width:320px; max-width:86vw; max-height:70vh; overflow-y:auto; background:rgba(10,14,40,0.97); border:1px solid rgba(0,229,255,0.28); border-radius:14px; padding:1rem; display:none; backdrop-filter:blur(18px); box-shadow:0 12px 48px rgba(0,0,0,0.5); }
+  #inspector.open { display:block; }
+  #inspector .insp-id { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#00E5FF; margin-bottom:0.4rem; }
+  #inspector .insp-content { color:#f7f8f8; font-size:0.8rem; line-height:1.5; margin-bottom:0.7rem; white-space:pre-wrap; }
+  #inspector .insp-meta { font-size:0.7rem; color:#8a8f98; display:grid; gap:0.25rem; }
+  #inspector .insp-meta b { color:#d0d6e0; font-weight:600; }
+  #inspector .insp-helixa { color:#9775fa; font-size:0.7rem; margin-top:0.3rem; }
+  #inspector-close { position:absolute; top:0.5rem; right:0.6rem; width:28px; height:28px; border:1px solid rgba(0,229,255,0.25); border-radius:50%; background:rgba(255,255,255,0.05); color:#d0d6e0; font-size:0.9rem; cursor:pointer; }
+  #ticker { position:fixed; bottom:4.6rem; left:50%; transform:translateX(-50%); z-index:10; font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#8a8f98; background:rgba(8,12,32,0.8); border:1px solid rgba(0,229,255,0.08); border-radius:8px; padding:0.3rem 0.8rem; max-width:70vw; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; pointer-events:none; }
+  #ticker .live { color:#00E5FF; }
   @media (max-width: 700px) {
     #hud { padding:0.7rem; gap:0.55rem; }
     .brand { width:100%; justify-content:space-between; }
@@ -70,6 +89,12 @@
     .legend-item { font-size:0.55rem; padding:0.3rem 0.45rem; }
     .instructions { right:0.65rem; left:0.65rem; bottom:2.9rem; text-align:center; font-size:0.55rem; }
     #tooltip { display:none !important; }
+    #search-bar { top:auto; bottom:5.2rem; left:50%; transform:translateX(-50%); width:88vw; }
+    #search-bar input { width:100%; }
+    #search-status { top:auto; bottom:8.4rem; }
+    #mode-toggle { top:auto; bottom:5.2rem; right:0.9rem; }
+    #inspector { width:92vw; max-height:50vh; top:auto; bottom:5rem; right:4vw; transform:none; }
+    #ticker { display:none; }
   }
 </style>
 </head>
@@ -78,7 +103,7 @@
 <div id="hud">
   <div class="brand">
     <h1>NEURAL_MESH</h1>
-    <span class="ver" id="version">v0.22.0</span>
+    <span class="ver" id="version">v0.23.0</span>
     <a class="repolink" href="https://github.com/BasedNUKEM/NEURAL_MESH" target="_blank" rel="noopener">github ↗</a>
   </div>
   <div id="stats-grid">
@@ -90,6 +115,20 @@
 </div>
 
 <div id="brain-badge">NEURAL_MESH ▸ CRYSTAL</div>
+
+<div id="search-bar">
+  <input id="search-input" type="text" placeholder="search the mesh…" autocomplete="off" spellcheck="false">
+  <button id="search-btn">recall</button>
+</div>
+<div id="search-status"></div>
+<button id="mode-toggle"><span class="dot" style="background:#00E5FF"></span>topology</button>
+
+<div id="inspector">
+  <button id="inspector-close" aria-label="Close memory details" onclick="closeInspector()">×</button>
+  <div id="inspector-body"></div>
+</div>
+
+<div id="ticker"><span class="live">LIVE</span> <span id="ticker-text">connecting…</span></div>
 
 <div id="legend">
   <div class="legend-item"><span class="legend-dot hot"></span> Hot Lane</div>
@@ -139,7 +178,7 @@ async function fetchMesh() {
   try {
     const [statsRes, pubRes] = await Promise.all([
       fetch(API+'/stats').then(r=>r.json()),
-      fetch(API+'/public?limit=80').then(r=>r.json())
+      fetch(API+'/public?limit=300').then(r=>r.json())
     ]);
     meshData.stats = statsRes;
     const results = pubRes.results || [];
@@ -467,6 +506,8 @@ const pointer = new THREE.Vector2();
 let hovered = null;
 let walkHighlights = [];   // active walk animation nodes
 let walkTrails = [];       // trail lines for walk activation
+let walkMode = 'bfs';      // 'bfs' (topology) | 'resonance' (activation spread)
+let searchResults = [];    // active search hit ids
 
 function onPointerMove(e) {
   pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -502,7 +543,10 @@ function onPointerDown(e) {
     firePulse(obj.position.clone());
     // Run associative walk from this node
     const nid = obj.userData.nodeId;
-    if (nid) runWalk(nid);
+    if (nid) {
+      runWalk(nid);
+      openInspector(nid);
+    }
   } else {
     const v = new THREE.Vector3(pointer.x, pointer.y, 0.5).unproject(camera);
     const dir = v.sub(camera.position).normalize();
@@ -517,10 +561,9 @@ function runWalk(nodeId) {
   fetch('/brain/walk', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({node_id: nodeId, hops: 2, top_n: 12})
+    body: JSON.stringify({node_id: nodeId, hops: 2, top_n: 12, mode: walkMode})
   }).then(r => r.json()).then(data => {
     if (!data.path || !data.path.length) return;
-    const total = data.path.length;
     const delay = 180; // ms between each node highlight
     data.path.forEach((step, i) => {
       setTimeout(() => {
@@ -536,19 +579,26 @@ function highlightWalkNode(step, index) {
   const entry = nodeMap[step.node_id];
   if (!entry) return;
   const m = entry.three;
-  // Flash the node bright white
-  const origColor = m.material.color.getHex();
+  // Flash the node bright
+  const glowR = m.geometry.parameters.radius * 3.5;
   const pulse = new THREE.Mesh(
-    new THREE.SphereGeometry(m.geometry.parameters.radius * 3.5, 16, 16),
+    new THREE.SphereGeometry(glowR, 16, 16),
     new THREE.MeshBasicMaterial({color: 0x00E5FF, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending})
   );
   pulse.position.copy(m.position);
   pulse.userData = { scale: 1, opacity: 0.9, target: pulse };
   scene.add(pulse);
   walkHighlights.push(pulse);
-  // Distance-based coloring
-  const distColors = {0: 0xffd700, 1: 0x00E5FF, 2: 0x4dabf7, 3: 0x9775fa};
-  const clr = distColors[step.distance] || 0xffffff;
+  // Color by distance (BFS) or activation (resonance)
+  let clr;
+  if (step.activation !== undefined) {
+    // resonance: activation 0..1 → deep blue → bright cyan
+    const a = Math.max(0, Math.min(1, step.activation));
+    clr = a > 0.35 ? 0xffd700 : a > 0.15 ? 0x00E5FF : 0x4dabf7;
+  } else {
+    const distColors = {0: 0xffd700, 1: 0x00E5FF, 2: 0x4dabf7, 3: 0x9775fa};
+    clr = distColors[step.distance] || 0xffffff;
+  }
   m.material.emissive = new THREE.Color(clr);
   m.material.emissiveIntensity = 1.5;
   // Reset after 2.5s
@@ -586,6 +636,7 @@ function clearWalk() {
     if (l.geometry) l.geometry.dispose();
   });
   walkTrails = [];
+  searchResults = [];
   // Reset all node emissives
   for (const id in nodeMap) {
     const m = nodeMap[id].three;
@@ -593,6 +644,83 @@ function clearWalk() {
     m.material.emissiveIntensity = 0.55;
   }
 }
+
+// ─── SEARCH (resonance recall) ──────────────────
+async function runSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  const statusEl = document.getElementById('search-status');
+  if (!q) return;
+  clearWalk();
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'recalling…';
+  try {
+    const r = await fetch('/mesh/recall', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: q, mode: 'resonance', limit: 8})
+    });
+    const data = await r.json();
+    const results = data.results || [];
+    if (!results.length) {
+      statusEl.textContent = 'no hits — try another query';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+      return;
+    }
+    statusEl.textContent = `${results.length} memories · resonance`;
+    setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+    // Animate hits sequentially: trail from the last hit to the next
+    results.forEach((hit, i) => {
+      setTimeout(() => {
+        // Big gold flash on the hit node
+        const entry = nodeMap[hit.id];
+        if (entry) {
+          const m = entry.three;
+          m.material.emissive = new THREE.Color(0xffd700);
+          m.material.emissiveIntensity = 2.0;
+          const pulse = new THREE.Mesh(
+            new THREE.SphereGeometry(m.geometry.parameters.radius * 5, 16, 16),
+            new THREE.MeshBasicMaterial({color: 0xffd700, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending})
+          );
+          pulse.position.copy(m.position);
+          pulse.userData = { scale: 1, opacity: 0.9 };
+          scene.add(pulse);
+          walkHighlights.push(pulse);
+          setTimeout(() => {
+            m.material.emissive = new THREE.Color(entry.data.color);
+            m.material.emissiveIntensity = 0.55;
+          }, 2500);
+        }
+        if (i > 0) drawWalkTrail(results[i-1].id, hit.id);
+      }, i * 220);
+    });
+  } catch(e) {
+    console.warn('search:', e.message);
+    statusEl.textContent = 'search failed';
+  }
+}
+
+// ─── NODE INSPECTOR ─────────────────────────────
+function openInspector(nodeId) {
+  const entry = nodeMap[nodeId];
+  if (!entry) return;
+  const d = entry.data;
+  const el = document.getElementById('inspector-body');
+  const created = d.created_at ? new Date(d.created_at * 1000).toISOString().slice(0, 16) + ' UTC' : 'n/a';
+  el.innerHTML = `
+    <div class="insp-id">#${escapeHtml(d.id)}</div>
+    <div class="insp-content">${escapeHtml(d.content)}</div>
+    <div class="insp-meta">
+      <div><b>type</b> ${escapeHtml(d.type || 'semantic')}</div>
+      <div><b>lane</b> ${escapeHtml(d.lane)}</div>
+      <div><b>trust</b> ${d.trust}</div>
+      <div><b>by</b> ${escapeHtml(d.by || 'unknown')}</div>
+      <div><b>provenance</b> ${escapeHtml(d.provenance || 'unknown')}</div>
+      <div><b>created</b> ${created}</div>
+      ${d.helixa ? `<div class="insp-helixa">🟦 Helixa #${escapeHtml(d.helixa)}</div>` : ''}
+    </div>`;
+  document.getElementById('inspector').classList.add('open');
+}
+window.closeInspector = () => document.getElementById('inspector').classList.remove('open');
 function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 window.addEventListener('pointermove', onPointerMove, { passive: true });
 window.addEventListener('pointerdown', onPointerDown, { passive: true });
@@ -658,6 +786,34 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// ─── SEARCH + MODE + TICKER WIRING ──────────────
+document.getElementById('search-btn').addEventListener('click', runSearch);
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runSearch();
+});
+const modeBtn = document.getElementById('mode-toggle');
+modeBtn.addEventListener('click', () => {
+  walkMode = walkMode === 'bfs' ? 'resonance' : 'bfs';
+  modeBtn.innerHTML = `<span class="dot" style="background:${walkMode === 'bfs' ? '#00E5FF' : '#ffd700'}"></span>${walkMode === 'bfs' ? 'topology' : 'resonance'}`;
+});
+// Live ticker — latest memory rotating
+async function startTicker() {
+  try {
+    const r = await fetch('/mesh/public?limit=20');
+    const data = await r.json();
+    const items = data.results || [];
+    if (!items.length) return;
+    let i = 0;
+    const tickerText = document.getElementById('ticker-text');
+    setInterval(() => {
+      const it = items[i % items.length];
+      tickerText.textContent = it.content.slice(0, 120);
+      i++;
+    }, 5000);
+  } catch(e) { console.warn('ticker:', e.message); }
+}
+startTicker();
 </script>
 </body>
 </html>
