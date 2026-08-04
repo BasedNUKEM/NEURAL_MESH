@@ -28,7 +28,12 @@ import time
 import urllib.request
 from typing import Any
 
-from eth_account import Account
+try:
+    from eth_account import Account
+    HAS_ETH_ACCOUNT = True
+except ImportError:
+    HAS_ETH_ACCOUNT = False
+    Account = None  # type: ignore
 
 from .helixa_attest import (
     build_attestation_message,
@@ -127,15 +132,30 @@ class HelixaSigner:
         Args:
             base_url: Helixa API base URL.
             wallet_file: Override path to wallet JSON. For testing.
+
+        If ``eth-account`` is not installed, the signer operates in
+        *degraded* mode: dry_run is always True and on-chain writes
+        return a clear status instead of a 500 error.
         """
         self.base_url = base_url.rstrip("/")
-        # Allow overriding the wallet source for testing
+        self._degraded = not HAS_ETH_ACCOUNT
+
         if wallet_file is not None:
             key, known_addr = _load_key_from_json(wallet_file)
         else:
             key, known_addr = _load_private_key()
-        self._account = Account.from_key(key)
-        self.address = known_addr or self._account.address
+
+        if HAS_ETH_ACCOUNT:
+            self._account = Account.from_key(key)
+            self.address = known_addr or self._account.address
+        else:
+            self._account = None
+            self.address = known_addr or "0x"  # best-effort from wallet file
+
+    @property
+    def degraded(self) -> bool:
+        """True when eth-account is unavailable (dry-run only)."""
+        return self._degraded
 
     # ── SIWA auth header ────────────────────────────────────────────
 
@@ -278,12 +298,24 @@ class HelixaSigner:
             return {
                 "ok": False,
                 "dry_run": True,
+                "degraded": self.degraded,
                 "node_id": node_id,
                 "agent_id": agent_id,
                 "address": self.address,
                 "message_hash": message.signing_hash(),
                 "action": "attest_mesh_node",
-                "note": "Set dry_run=False to sign and record the attestation.",
+                "note": "Set dry_run=False to sign and record the attestation."
+                        + (" Install 'eth-account' first." if self.degraded else ""),
+            }
+
+        if self.degraded:
+            return {
+                "ok": False,
+                "error": "Cannot sign — eth-account not installed.",
+                "dry_run": False,
+                "degraded": True,
+                "note": "Install eth-account to enable on-chain attestation: "
+                        "pip install eth-account",
             }
 
         # Sign locally

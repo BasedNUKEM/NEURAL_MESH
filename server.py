@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask, request, jsonify, send_from_directory
 from neural_mesh.core import Mesh, MemoryType
+from neural_mesh import __version__
 from neural_mesh.lifecycle import MemoryLifecycle
 from neural_mesh.server_security import RateLimiter, auth_ok, origin_allowed, safe_path
 
@@ -31,7 +32,8 @@ RATE_LIMITER = RateLimiter(
 AUTH_ENDPOINTS = {"add", "memory_cycle", "sleep_mesh", "consolidate_mesh",
                   "pointer_put", "pointer_summary", "dream", "export_mesh",
                   "merge", "stamp", "intuition_ingest_receipts", "eval_qa",
-                  "yantrikdb_ingest", "yantrikdb_think", "helixa_attest_node"}
+                  "yantrikdb_ingest", "yantrikdb_think", "helixa_attest_node",
+                  "peer_query"}
 POLICY_FIELDS = {"trust", "cap_trust", "allow_new", "allow_merge"}
 
 
@@ -90,7 +92,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.24.0",
+        "version": "0.25.0",
         "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
@@ -253,10 +255,11 @@ def brain_dream_preview():
 
 @app.route("/mesh/recall", methods=["POST"])
 def recall():
-    """Body: {query, limit?, mode?} — mode: "resonance"|"dense"|"hybrid"|"lexical" """
+    """Body: {query, limit?, mode?, enhanced?} — enhanced=true merges YantrikDB results."""
     data = request.get_json()
     mode = data.get("mode", "resonance")
     limit = data.get("limit", 10)
+    enhanced = data.get("enhanced", False)
 
     if mode == "dense":
         nodes = mesh.dense_recall(data["query"], top_k=limit, lane=data.get("lane"))
@@ -272,12 +275,27 @@ def recall():
             lane=data.get("lane"),
         )
 
+    results = [
+        {"id": n.id, "content": n.content, "type": n.type.value,
+         "lane": n.lane, "trust": n.trust}
+        for n in nodes
+    ]
+
+    yantrikdb_hits = []
+    yantrikdb_status = "unavailable"
+    if enhanced:
+        try:
+            bridge = _yantrikdb_bridge()
+            yantrikdb_hits = bridge.recall(data["query"], top_k=min(limit, 5))
+            yantrikdb_status = "ok" if yantrikdb_hits else "empty"
+        except Exception:
+            yantrikdb_status = "unavailable"
+
     return jsonify({
-        "results": [
-            {"id": n.id, "content": n.content, "type": n.type.value,
-             "lane": n.lane, "trust": n.trust}
-            for n in nodes
-        ]
+        "results": results,
+        "enhanced": enhanced,
+        "yantrikdb": {"status": yantrikdb_status, "hits": len(yantrikdb_hits),
+                      "results": yantrikdb_hits} if enhanced else None,
     })
 
 
@@ -543,7 +561,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.24.0",
+        "version": "0.25.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -599,6 +617,202 @@ def answer_proof():
         alpha=float(data.get("alpha", 0.5)),
         reader=reader,
     ))
+
+# ─── Federation & Peer API ──────────────────────────────────────────────────
+
+
+@app.route("/mesh/peer/manifest", methods=["GET"])
+def peer_manifest():
+    """Public peer manifest — how another mesh discovers and trusts this one.
+
+    Returns PeerPolicy-compatible metadata: trust caps, node counts,
+    provenance breakdown, active lanes, and capability flags.
+    Intended for cross-agent mesh federation: an agent queries this endpoint
+    to decide whether to trust and merge from this mesh.
+    """
+    stats = mesh.stats()
+    nodes = mesh._load()
+
+    # provenance breakdown
+    prov_counts = {}
+    lane_counts = {}
+    for n in nodes.values():
+        if n.superseded_by:
+            continue
+        p = n.provenance or "unknown"
+        prov_counts[p] = prov_counts.get(p, 0) + 1
+        lane_counts[n.lane] = lane_counts.get(n.lane, 0) + 1
+
+    return jsonify({
+        "mesh_id": "neural-mesh-1",  # stable identity; override per deployment
+        "version": __version__,
+        "nodes": stats["nodes"],
+        "active_nodes": stats["active_nodes"],
+        "provenance_breakdown": stats.get("provenance_breakdown", prov_counts),
+        "lane_breakdown": lane_counts,
+        "resonance_backend": stats.get("resonance_backend", "python"),
+        "policy": {
+            "trust": True,
+            "cap_trust": 0.9,
+            "allow_new": True,
+            "allow_merge": True,
+        },
+        "capabilities": [
+            "resonance_recall",
+            "dense_recall",
+            "lexical_recall",
+            "hybrid_recall",
+            "dream_consolidation",
+            "helixa_provenance",
+            "peer_merge",
+            "subgraph_query",
+            "intuition_export",
+            "dream_preview",
+        ],
+        "query_endpoint": "/mesh/peer/query",
+    })
+
+
+@app.route("/mesh/peer/query", methods=["POST"])
+def peer_query():
+    """Cross-agent peer recall — query this mesh as a federated peer.
+
+    Body: {query, top_k?=5, lane?=None, mode?="resonance"}
+    Returns PeerPolicy-filtered results with trust, provenance,
+    agent_id, and Helixa stamps intact for downstream consensus ranking.
+
+    Auth: API_TOKEN required (cross-agent retrieval is trusted OPERATION).
+    """
+    data = request.get_json() or {}
+    query = data.get("query", "").strip()
+    if not query:
+        return _json_error("query required", 400)
+
+    top_k = max(1, min(int(data.get("top_k", 5)), 50))
+    lane = data.get("lane")  # None = all lanes
+    if lane not in (None, "hot", "cold"):
+        return _json_error("lane must be 'hot', 'cold', or null", 400)
+
+    mode = data.get("mode", "resonance")
+    try:
+        if mode == "dense":
+            results = mesh.dense_recall(query, top_k=top_k, lane=lane)
+        elif mode == "lexical":
+            results = mesh.lexical_recall(query, top_k=top_k, lane=lane)
+        elif mode == "hybrid":
+            results = mesh.hybrid_recall(query, top_k=top_k, alpha=data.get("alpha", 0.9), lane=lane)
+        else:
+            results = mesh.recall(query, top_k=top_k, lane=lane)
+    except Exception:
+        return _json_error("recall failed", 500)
+
+    from neural_mesh.sharing import consensus_rank
+    ranked = consensus_rank(results)
+
+    return jsonify({
+        "query": query,
+        "mode": mode,
+        "results": [
+            {
+                "id": n.id,
+                "content": n.content[:300],
+                "type": n.type.value if hasattr(n.type, "value") else str(n.type),
+                "trust": round(n.trust, 4),
+                "lane": n.lane,
+                "provenance": n.provenance or "unknown",
+                "agent_id": getattr(n, "agent_id", "") or "self",
+                "by": getattr(n, "by", "self") or "self",
+                "conflict_group": getattr(n, "conflict_group", None),
+                "helixa": (n.meta.get("helixa_stamp", {}).get("agent_id")
+                           if n.meta and n.meta.get("helixa_stamp") else None),
+                "created_at": getattr(n, "created_at", None),
+            } for n in ranked[:top_k]
+        ],
+        "total": len(results),
+        "returned": min(len(results), top_k),
+    })
+
+
+# ─── Subgraph Query ────────────────────────────────────────────────────────
+
+
+@app.route("/mesh/subgraph", methods=["POST"])
+def subgraph_query():
+    """Structured subgraph filter — slice the mesh by lane, provenance, author,
+    date range, and trust range.  Returns a focused subset of nodes.
+
+    Body: {lane?, provenance?, by?, since?, trust_min?, trust_max?, limit?=50}
+    All filters are optional and combined with AND. Public read-only.
+    """
+    data = request.get_json() or {}
+    nodes = mesh._load()
+
+    by_filter = data.get("by", "").strip() or None
+    lane_filter = data.get("lane")
+    if lane_filter not in (None, "hot", "cold"):
+        return _json_error("lane must be 'hot', 'cold', or null", 400)
+
+    provenance = data.get("provenance", "").strip() or None
+    since = data.get("since")  # unix timestamp
+    trust_min = data.get("trust_min")
+    trust_max = data.get("trust_max")
+    limit = max(1, min(int(data.get("limit", 50)), 200))
+
+    if since is not None:
+        try:
+            since = float(since)
+        except (TypeError, ValueError):
+            return _json_error("since must be a unix timestamp", 400)
+    if trust_min is not None:
+        try:
+            trust_min = float(trust_min)
+        except (TypeError, ValueError):
+            return _json_error("trust_min must be a float", 400)
+    if trust_max is not None:
+        try:
+            trust_max = float(trust_max)
+        except (TypeError, ValueError):
+            return _json_error("trust_max must be a float", 400)
+
+    results = []
+    for n in nodes.values():
+        if n.superseded_by:
+            continue
+        if by_filter and getattr(n, "by", "") != by_filter:
+            continue
+        if lane_filter and n.lane != lane_filter:
+            continue
+        if provenance and n.provenance != provenance:
+            continue
+        if since is not None:
+            created = getattr(n, "created_at", 0) or 0
+            if created < since:
+                continue
+        if trust_min is not None and n.trust < trust_min:
+            continue
+        if trust_max is not None and n.trust > trust_max:
+            continue
+        results.append({
+            "id": n.id,
+            "content": n.content[:200],
+            "type": n.type.value if hasattr(n.type, "value") else str(n.type),
+            "trust": round(n.trust, 3),
+            "lane": n.lane,
+            "provenance": n.provenance or "unknown",
+            "by": getattr(n, "by", "") or "unknown",
+            "created_at": getattr(n, "created_at", None),
+        })
+        if len(results) >= limit:
+            break
+
+    return jsonify({
+        "filters": {"by": by_filter, "lane": lane_filter, "provenance": provenance,
+                     "since": since, "trust_min": trust_min, "trust_max": trust_max},
+        "results": results,
+        "total_matched": len(results),
+        "limit": limit,
+    })
+
 
 # ─── Intuition Bridge ────────────────────────────────────────────────────
 
@@ -675,9 +889,15 @@ def helixa_signer_status():
         signer = HelixaSigner()
         return jsonify({
             "ok": True,
+            "degraded": signer.degraded,
             "address": signer.address,
             "agent_id": HELIXA_AGENT_ID,
-            "note": "Signer loaded. Use POST /helixa/attest-node for attestation (dry_run=true by default).",
+            "note": ("Signer loaded (dry-run only — eth-account not installed). "
+                     "Run dry-run attestation: POST /helixa/attest-node"
+                     if signer.degraded
+                     else "Signer loaded. "
+                          "Use POST /helixa/attest-node for attestation "
+                          "(dry_run=true by default)."),
         })
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
