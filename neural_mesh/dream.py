@@ -161,3 +161,90 @@ def recall_associative(mesh, query: str, top_k: int = 5, hops: int = 2,
         key=lambda x: -x[1],
     )
     return [nodes[i] for i, _ in ranked[:top_k]]
+
+
+def dream_preview(mesh, decay: float = 0.9, reinforce_k: int = 3,
+                  min_link: float = 0.05, prune_below: float = 0.04,
+                  max_age_days: float = 30.0, muse_fn=None,
+                  reinforce: bool = True) -> dict:
+    """Dry-run DREAM consolidation — returns what WOULD happen, no writes.
+
+    Deep-copies the live node dict internally, simulates every phase on the
+    copies, and returns a report with affected node IDs + candidate insight
+    texts.  The production mesh is never mutated.
+
+    Returns:
+      {
+        "drifted_ids": [...],      # ids whose resonance would decay
+        "reinforced_ids": [...],   # ids that would gain Hebbian link boosts
+        "archived_ids": [...],     # ids that WOULD be superseded (pruned)
+        "insights": [...]          # insight texts muse_fn would produce
+      }
+    """
+    import copy as _copy
+
+    nodes = mesh._load()
+    copies = {k: _copy.deepcopy(v) for k, v in nodes.items()}
+    now = time.time()
+
+    drifted_ids, reinforced_ids, archived_ids = [], [], []
+    insights = []
+    live = [n for n in copies.values() if not n.superseded_by]
+
+    # D — Drift (simulate on copies)
+    for n in live:
+        age_days = max(0.0, (now - n.last_accessed) / 86400.0)
+        new_r = max(0.0, n.resonance * (decay ** age_days))
+        if new_r < n.resonance - 0.001:
+            drifted_ids.append(n.id)
+        n.resonance = new_r
+
+    # E — Evaluate (attribution weighting — reads stamps, no mutation)
+    for n in live:
+        w = _author_weight(mesh, n)
+        n.meta = dict(getattr(n, "meta", {}) or {})
+        n.meta["author_weight"] = round(w, 3)
+
+    # R — Reinforce candidates (count per-node boost events)
+    link_boost = defaultdict(int)
+    if reinforce:
+        from .embed import cosine as _cos
+        for n in live:
+            qe = getattr(n, "embedding", None)
+            if qe is None:
+                continue
+            scored = sorted(
+                ((_cos(qe, o.embedding), o) for o in live if o.id != n.id),
+                key=lambda x: -x[0],
+            )[:reinforce_k]
+            for sim, o in scored:
+                if sim <= 0.0:
+                    continue
+                link_boost[o.id] += 1
+
+    reinforced_ids = sorted(
+        {i for i, c in link_boost.items() if c >= 2}
+        or list(link_boost.keys())[:10]
+    )
+
+    # A — Archive candidates
+    for n in live:
+        if n.superseded_by:
+            continue
+        age_days = max(0.0, (now - n.last_accessed) / 86400.0)
+        aw = n.meta.get("author_weight", n.trust) if n.meta else n.trust
+        if (n.resonance < prune_below or age_days > max_age_days) and aw < 0.5:
+            archived_ids.append(n.id)
+
+    # M — Muse insights (run on copies — muse_fn only reads, returns strings)
+    if muse_fn:
+        survivors = [n for n in copies.values()
+                     if not n.superseded_by and n.resonance >= prune_below]
+        insights = muse_fn(survivors)
+
+    return {
+        "drifted_ids": drifted_ids,
+        "reinforced_ids": reinforced_ids,
+        "archived_ids": archived_ids,
+        "insights": insights,
+    }

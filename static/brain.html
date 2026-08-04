@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEURAL_MESH Brain — live agentic memory mesh · v0.23.0</title>
+<title>NEURAL_MESH Brain — live agentic memory mesh · v0.24.0</title>
 <meta name="description" content="NEURAL_MESH — a self-organizing, self-forgetting agentic memory mesh for AI agents. Typed memory, mesh topology, resonance retrieval, hot/cold lanes, sleep/prune, versioned truth. Live 3D brain.">
 <link rel="canonical" href="https://api.d0xeddev.com/brain">
 <meta name="theme-color" content="#000818">
@@ -20,13 +20,13 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:type" content="image/png">
-<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.23.0">
+<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.24.0">
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="NEURAL_MESH — agentic memory mesh">
 <meta name="twitter:description" content="Self-organizing · self-forgetting memory for AI agents. Typed lanes, resonance retrieval, versioned truth, Rust hot path. Drag the live brain.">
 <meta name="twitter:image" content="https://api.d0xeddev.com/brain/og.png">
-<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.23.0">
+<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.24.0">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#000818; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
@@ -67,6 +67,9 @@
   #mode-toggle { position:fixed; top:20px; right:150px; z-index:11; font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#d0d6e0; background:rgba(8,12,32,0.9); border:1px solid rgba(0,229,255,0.25); border-radius:7px; padding:0.3rem 0.6rem; cursor:pointer; }
   #mode-toggle:hover { background:rgba(0,229,255,0.15); }
   #mode-toggle .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:0.35rem; vertical-align:middle; }
+  #dream-btn { position:fixed; top:52px; right:150px; z-index:11; font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#d0d6e0; background:rgba(8,12,32,0.9); border:1px solid rgba(151,117,250,0.3); border-radius:7px; padding:0.3rem 0.6rem; cursor:pointer; }
+  #dream-btn:hover { background:rgba(151,117,250,0.2); }
+  #dream-btn .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:0.35rem; vertical-align:middle; }
   #inspector { position:fixed; top:50%; right:1.5rem; transform:translateY(-50%); z-index:30; width:320px; max-width:86vw; max-height:70vh; overflow-y:auto; background:rgba(10,14,40,0.97); border:1px solid rgba(0,229,255,0.28); border-radius:14px; padding:1rem; display:none; backdrop-filter:blur(18px); box-shadow:0 12px 48px rgba(0,0,0,0.5); }
   #inspector.open { display:block; }
   #inspector .insp-id { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#00E5FF; margin-bottom:0.4rem; }
@@ -103,7 +106,7 @@
 <div id="hud">
   <div class="brand">
     <h1>NEURAL_MESH</h1>
-    <span class="ver" id="version">v0.23.0</span>
+    <span class="ver" id="version">v0.24.0</span>
     <a class="repolink" href="https://github.com/BasedNUKEM/NEURAL_MESH" target="_blank" rel="noopener">github ↗</a>
   </div>
   <div id="stats-grid">
@@ -122,6 +125,7 @@
 </div>
 <div id="search-status"></div>
 <button id="mode-toggle"><span class="dot" style="background:#00E5FF"></span>topology</button>
+<button id="dream-btn" title="Preview DREAM consolidation (dry-run, no writes)"><span class="dot" style="background:#9775fa"></span>dream</button>
 
 <div id="inspector">
   <button id="inspector-close" aria-label="Close memory details" onclick="closeInspector()">×</button>
@@ -173,6 +177,7 @@ let meshData = { nodes: [], links: [], stats: {} };
 let nodeMap = {};       // id -> {three: mesh, data: {...}}
 let linkLines = [];     // THREE.Line objects for mesh links
 let linkGroup = new THREE.Group();
+let helixaGroup = new THREE.Group();  // purple aura rings for Helixa-verified nodes
 
 async function fetchMesh() {
   try {
@@ -263,6 +268,20 @@ function buildMeshVisuals() {
     linkGroup.add(line);
     linkLines.push(line);
   }
+  // Helixa aura rings — verified-agent memories get a pulsing purple halo
+  while (helixaGroup.children.length) helixaGroup.remove(helixaGroup.children[0]);
+  helixaAuras = [];
+  for (const n of meshData.nodes) {
+    if (!n.helixa) continue;
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(n.size * 2.6, n.size * 0.28, 8, 40),
+      new THREE.MeshBasicMaterial({ color: 0x9775fa, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending })
+    );
+    ring.position.set(n.x, n.y, n.z);
+    ring.userData = { phase: Math.random()*Math.PI*2, nodeId: n.id };
+    helixaGroup.add(ring);
+    helixaAuras.push(ring);
+  }
   // Fire arrival pulses
   for (let i = 0; i < Math.min(meshData.nodes.length, 8); i++) {
     const n = meshData.nodes[Math.floor(Math.random()*meshData.nodes.length)];
@@ -280,6 +299,7 @@ const THEMES = [
 let T = THEMES[0];
 let frozen = false;
 let pulseWaves = [];
+let helixaAuras = [];     // pulsing purple rings on Helixa-verified memories
 
 // ─── CIRCUIT TEXTURE ────────────────────────────
 function makeCircuitTexture(size, accentHex, alpha) {
@@ -486,6 +506,7 @@ rings.forEach(r => helixGroup.add(r));
 const meshGroup = new THREE.Group();
 scene.add(meshGroup);
 scene.add(linkGroup);
+scene.add(helixaGroup);
 
 // ─── PULSES ─────────────────────────────────────
 function firePulse(origin) {
@@ -722,6 +743,73 @@ function openInspector(nodeId) {
 }
 window.closeInspector = () => document.getElementById('inspector').classList.remove('open');
 function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── DREAM CYCLE VISUALIZATION ──────────────────
+let dreamNodes = [];  // temporary visual elements from dream animation
+async function runDream() {
+  clearWalk();
+  removeDreamViz();
+  const btn = document.getElementById('dream-btn');
+  btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
+  btn.innerHTML = '<span class="dot" style="background:#9775fa"></span>dreaming…';
+  try {
+    const r = await fetch('/brain/dream-preview', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({muse: 'template'})
+    });
+    const data = await r.json();
+    const archSet = new Set(data.archived_ids || []);
+    const reinSet = new Set(data.reinforced_ids || []);
+    const driftSet = new Set(data.drifted_ids || []);
+    // Phase 1: archived nodes — flash red + shrink (400ms)
+    archSet.forEach(id => {
+      const entry = nodeMap[id];
+      if (!entry) return;
+      const m = entry.three;
+      m.material.emissive = new THREE.Color(0xff3333);
+      m.material.emissiveIntensity = 2.5;
+      const shrink = { target: m, step: 0 };
+      dreamNodes.push(shrink);
+      setTimeout(() => {
+        m.material.emissiveIntensity = 0.2;
+      }, 1500);
+    });
+    // Phase 2: reinforced nodes — bright gold + expand (600ms)
+    reinSet.forEach((id, i) => {
+      setTimeout(() => {
+        const entry = nodeMap[id];
+        if (!entry) return;
+        const m = entry.three;
+        m.material.emissive = new THREE.Color(0xffd700);
+        m.material.emissiveIntensity = 3.0;
+        m.scale.setScalar(1.8);
+        const boost = { target: m, type: 'reinforce' };
+        dreamNodes.push(boost);
+        setTimeout(() => {
+          m.material.emissive = new THREE.Color(entry.data.color);
+          m.material.emissiveIntensity = 0.55;
+          m.scale.setScalar(1.0);
+        }, 1200);
+      }, 400 + i * 60);
+    });
+    // Phase 3: insights — show count in status
+    const statusEl = document.getElementById('search-status');
+    statusEl.style.display = 'block';
+    statusEl.textContent = `dream preview · ${archSet.size}A/${reinSet.size}R/${driftSet.size}D · ${data.insights?.length||0} insights · dry-run`;
+    setTimeout(() => { statusEl.style.display = 'none'; }, 8000);
+    btn.innerHTML = '<span class="dot" style="background:#9775fa"></span>dream';
+    btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+  } catch(e) {
+    console.warn('dream:', e.message);
+    btn.innerHTML = '<span class="dot" style="background:#9775fa"></span>dream';
+    btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+  }
+}
+function removeDreamViz() {
+  dreamNodes.forEach(d => { if (d.target && d.type === 'reinforce') { d.target.scale.setScalar(1); } });
+  dreamNodes = [];
+}
 window.addEventListener('pointermove', onPointerMove, { passive: true });
 window.addEventListener('pointerdown', onPointerDown, { passive: true });
 window.closeMobileDetail = () => document.getElementById('mobile-detail').classList.remove('open');
@@ -754,6 +842,11 @@ function animate() {
       m.scale.setScalar(1 + Math.sin(t*2.2 + m.userData.phase)*0.15);
     }
     rings.forEach(r => { r.rotation.x += dt * r.userData.sx; r.rotation.z += dt * r.userData.sz; });
+    // Helixa auras: purple pulse between 0.35-0.95 opacity at 1.8hz
+    helixaAuras.forEach(r => {
+      r.material.opacity = 0.45 + Math.sin(t * 1.8 + r.userData.phase) * 0.35;
+      r.rotation.x += dt * 0.6; r.rotation.z += dt * 0.35;
+    });
     ladder1.rotation.y += dt * 0.12;
     ladder2.rotation.y -= dt * 0.1;
     ladder2.rotation.x += dt * 0.05;
@@ -797,6 +890,7 @@ modeBtn.addEventListener('click', () => {
   walkMode = walkMode === 'bfs' ? 'resonance' : 'bfs';
   modeBtn.innerHTML = `<span class="dot" style="background:${walkMode === 'bfs' ? '#00E5FF' : '#ffd700'}"></span>${walkMode === 'bfs' ? 'topology' : 'resonance'}`;
 });
+document.getElementById('dream-btn').addEventListener('click', runDream);
 // Live ticker — latest memory rotating
 async function startTicker() {
   try {

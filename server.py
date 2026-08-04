@@ -90,7 +90,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.23.0",
+        "version": "0.24.0",
         "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
@@ -216,6 +216,40 @@ def add():
         by=data.get("by", ""),
     )
     return jsonify({"id": node.id, "content": node.content, "type": node.type.value})
+
+
+@app.route("/brain/dream-preview", methods=["POST"])
+def brain_dream_preview():
+    """Dry-run DREAM consolidation — PUBLIC, read-only, zero writes.
+
+    Simulates the DREAM phases (Drift/Evaluate/Reinforce/Archive/Muse) on
+    deep copies of the live mesh nodes without mutating the database.
+    Returns affected node IDs and candidate insight texts so the brain
+    visualization can animate what WOULD happen during a dream cycle.
+
+    Body (optional): {muse: "template"|false} — defaults to template.
+    """
+    from neural_mesh.dream import dream_preview
+    from neural_mesh.muse import template_muse
+
+    data = request.get_json() or {}
+    muse = data.get("muse", "template")
+    muse_fn = template_muse if muse == "template" else None
+
+    try:
+        result = dream_preview(mesh, muse_fn=muse_fn)
+    except Exception:
+        return _json_error("dream preview failed", 500)
+
+    return jsonify({
+        "drifted_ids": result["drifted_ids"],
+        "reinforced_ids": result["reinforced_ids"],
+        "archived_ids": result["archived_ids"],
+        "insights": result["insights"],
+        "muse": muse,
+        "note": "dry-run — production mesh NOT mutated"
+    })
+
 
 @app.route("/mesh/recall", methods=["POST"])
 def recall():
@@ -509,7 +543,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.23.0",
+        "version": "0.24.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
