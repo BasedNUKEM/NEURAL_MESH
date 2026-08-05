@@ -101,7 +101,7 @@ def _parse_receipt_md(path: str) -> list[dict]:
 def cmd_push(mesh_path: str):
     """Export mesh → Intuition atoms + triples."""
     mesh = _load_mesh(mesh_path)
-    print(f"🧠 mesh: {mesh_path} ({mesh.stats()['nodes']} nodes)")
+    print(f"🧠 mesh: {mesh_path} ({mesh.stats()['total']} nodes)")
 
     # Build atoms from distinct terms that appear in mesh
     nodes = mesh._load()
@@ -153,7 +153,7 @@ def cmd_push(mesh_path: str):
         "triples": triples,
         "triple_count": len(triples),
         "stats": {
-            "total_nodes": mesh.stats()["nodes"],
+            "total_nodes": mesh.stats()["total"],
             "provenance_groups": provenance_groups,
             "lane_groups": lane_groups,
         },
@@ -215,9 +215,9 @@ def cmd_status(mesh_path: str):
     mesh = _load_mesh(mesh_path)
     intuition_count = _count_nodes(mesh, "intuition")
     print(f"🟦 Intuition nodes in mesh: {intuition_count}")
-    print(f"🟦 Total mesh nodes: {mesh.stats()['nodes']}")
+    print(f"🟦 Total mesh nodes: {mesh.stats()['total']}")
     if intuition_count > 0:
-        print(f"🟦 Integration: ACTIVE — {intuition_count / mesh.stats()['nodes'] * 100:.1f}% of mesh")
+        print(f"🟦 Integration: ACTIVE — {intuition_count / mesh.stats()['total'] * 100:.1f}% of mesh")
     else:
         print("🟦 Integration: pending — run `python3 scripts/intuition_sync.py pull <receipt.md>`")
 

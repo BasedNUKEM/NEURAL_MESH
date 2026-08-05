@@ -108,6 +108,21 @@ def brain():
     """Serve the 3D brain visualization."""
     return send_from_directory("static", "brain.html")
 
+@app.route("/brain/og.png", methods=["GET"])
+def brain_og():
+    """Serve the brain OpenGraph card."""
+    return send_from_directory("static", "brain-og.png")
+
+@app.route("/favicon.ico", methods=["GET"])
+def favicon():
+    """Serve the favicon."""
+    return send_from_directory("static", "favicon.png")
+
+@app.route("/brain/favicon.png", methods=["GET"])
+def brain_favicon():
+    """Serve the favicon under /brain too (import-map asset path)."""
+    return send_from_directory("static", "favicon.png")
+
 @app.route("/brain/walk", methods=["POST"])
 def brain_walk():
     """Associative walk from a seed node — graph traversal for brain animation.
