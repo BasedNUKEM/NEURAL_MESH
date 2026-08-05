@@ -92,7 +92,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.25.2",
+        "version": "0.25.3",
         "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
@@ -543,6 +543,7 @@ def public_mesh():
             "by": meta.get("by", "unknown"),
             "trust": meta.get("trust", 1.0),
             "created_at": meta.get("created_at"),
+            "lane": meta.get("lane", "hot"),
             "helixa": meta.get("helixa_stamp", {}).get("agent_id") if meta.get("helixa_stamp") else None,
         })
 
@@ -576,7 +577,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.25.2",
+        "version": "0.25.3",
         "provenance_breakdown": provenance_breakdown,
     })
 
