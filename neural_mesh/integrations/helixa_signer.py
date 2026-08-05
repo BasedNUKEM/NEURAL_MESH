@@ -140,17 +140,19 @@ class HelixaSigner:
         self.base_url = base_url.rstrip("/")
         self._degraded = not HAS_ETH_ACCOUNT
 
+        if self._degraded:
+            # No key needed — dry-run only. Never touch key material.
+            self._account = None
+            self.address = ""
+            return
+
         if wallet_file is not None:
             key, known_addr = _load_key_from_json(wallet_file)
         else:
             key, known_addr = _load_private_key()
 
-        if HAS_ETH_ACCOUNT:
-            self._account = Account.from_key(key)
-            self.address = known_addr or self._account.address
-        else:
-            self._account = None
-            self.address = known_addr or "0x"  # best-effort from wallet file
+        self._account = Account.from_key(key)
+        self.address = known_addr or self._account.address
 
     @property
     def degraded(self) -> bool:
