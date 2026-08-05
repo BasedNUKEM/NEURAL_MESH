@@ -71,4 +71,4 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "RateLimiter", "auth_ok", "origin_allowed", "safe_path",
            "LLMReader", "QAJudge", "run_qa_eval", "load_test_set",
            "HelixaSigner"]
-__version__ = "0.25.1"
+__version__ = "0.25.2"

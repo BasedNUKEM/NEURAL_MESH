@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEURAL_MESH Brain — live agentic memory mesh · v0.25.1</title>
+<title>NEURAL_MESH Brain — live agentic memory mesh · v0.25.2</title>
 <meta name="description" content="NEURAL_MESH — a self-organizing, self-forgetting agentic memory mesh for AI agents. Typed memory, mesh topology, resonance retrieval, hot/cold lanes, sleep/prune, versioned truth. Live 3D brain.">
 <link rel="canonical" href="https://api.d0xeddev.com/brain">
 <meta name="theme-color" content="#000818">
@@ -20,13 +20,13 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:type" content="image/png">
-<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.25.1">
+<meta property="og:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.25.2">
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="NEURAL_MESH — agentic memory mesh">
 <meta name="twitter:description" content="Self-organizing · self-forgetting memory for AI agents. Typed lanes, resonance retrieval, versioned truth, Rust hot path. Drag the live brain.">
 <meta name="twitter:image" content="https://api.d0xeddev.com/brain/og.png">
-<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.25.1">
+<meta name="twitter:image:alt" content="NEURAL_MESH brain mesh — live agentic memory, rust backend, v0.25.2">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#000818; color:#d0d6e0; font-family:'Inter',system-ui,-apple-system,sans-serif; overflow:hidden; height:100vh; width:100vw; }
@@ -70,6 +70,10 @@
   #dream-btn { position:fixed; top:52px; right:150px; z-index:11; font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#d0d6e0; background:rgba(8,12,32,0.9); border:1px solid rgba(151,117,250,0.3); border-radius:7px; padding:0.3rem 0.6rem; cursor:pointer; }
   #dream-btn:hover { background:rgba(151,117,250,0.2); }
   #dream-btn .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:0.35rem; vertical-align:middle; }
+  #pause-btn { position:fixed; top:84px; right:150px; z-index:11; font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#d0d6e0; background:rgba(8,12,32,0.9); border:1px solid rgba(0,229,255,0.3); border-radius:7px; padding:0.3rem 0.6rem; cursor:pointer; }
+  #pause-btn:hover { background:rgba(0,229,255,0.2); }
+  #pause-btn .dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:0.35rem; vertical-align:middle; }
+  #pause-timer { position:fixed; top:84px; right:224px; z-index:11; font-family:'JetBrains Mono',monospace; font-size:0.58rem; color:#8a8f98; background:rgba(8,12,32,0.85); border-radius:5px; padding:0.2rem 0.5rem; display:none; border:1px solid rgba(0,229,255,0.15); }
   #inspector { position:fixed; top:50%; right:1.5rem; transform:translateY(-50%); z-index:30; width:320px; max-width:86vw; max-height:70vh; overflow-y:auto; background:rgba(10,14,40,0.97); border:1px solid rgba(0,229,255,0.28); border-radius:14px; padding:1rem; display:none; backdrop-filter:blur(18px); box-shadow:0 12px 48px rgba(0,0,0,0.5); }
   #inspector.open { display:block; }
   #inspector .insp-id { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#00E5FF; margin-bottom:0.4rem; }
@@ -126,6 +130,8 @@
 <div id="search-status"></div>
 <button id="mode-toggle"><span class="dot" style="background:#00E5FF"></span>topology</button>
 <button id="dream-btn" title="Preview DREAM consolidation (dry-run, no writes)"><span class="dot" style="background:#9775fa"></span>dream</button>
+<button id="pause-btn" title="Pause live feed - inspect connections freely (5-min buffer)"><span class="dot" style="background:#00E5FF"></span>pause</button>
+<span id="pause-timer"></span>
 
 <div id="inspector">
   <button id="inspector-close" aria-label="Close memory details" onclick="closeInspector()">×</button>
@@ -203,7 +209,7 @@ async function fetchMesh() {
         x: r * Math.sin(phi) * Math.cos(theta),
         y: r * Math.sin(phi) * Math.sin(theta) * 0.8,
         z: r * Math.cos(phi),
-        size: 0.04 + (Number(n.trust || 1.0) * 0.05),
+        size: 0.04 + (Number(n.trust || 1.0) * 0.05) * (n.lane === 'dream' ? 2.2 : 1),
         color: colorFor(n.lane || laneFor(i))
       };
     });
@@ -247,7 +253,7 @@ function buildMeshVisuals() {
   for (const n of meshData.nodes) {
     const geo = new THREE.SphereGeometry(n.size, 16, 16);
     const mat = new THREE.MeshPhongMaterial({
-      color: n.color, emissive: n.color, emissiveIntensity: 0.55,
+      color: n.color, emissive: n.color, emissiveIntensity: n.lane === 'dream' ? 1.2 : 0.55,
       shininess: 60, specular: 0xffffff
     });
     const sphere = new THREE.Mesh(geo, mat);
@@ -263,7 +269,7 @@ function buildMeshVisuals() {
     const a = nodeMap[l.a], b = nodeMap[l.b];
     if (!a || !b) continue;
     const geo = new THREE.BufferGeometry().setFromPoints([a.three.position, b.three.position]);
-    const mat = new THREE.LineBasicMaterial({ color: 0x00E5FF, transparent: true, opacity: 0.12 + l.strength*0.15, blending: THREE.AdditiveBlending });
+    const mat = new THREE.LineBasicMaterial({ color: 0x0a3a5a, transparent: true, opacity: 0.06 + l.strength*0.10, blending: THREE.AdditiveBlending });
     const line = new THREE.Line(geo, mat);
     linkGroup.add(line);
     linkLines.push(line);
@@ -298,6 +304,11 @@ const THEMES = [
 ];
 let T = THEMES[0];
 let frozen = false;
+let paused = false;
+let pauseTimer = null;
+let pauseEndTime = 0;
+let refreshInterval = null;
+let connectedLinks = [];  // highlighted links for selected node (pause mode)
 let pulseWaves = [];
 let helixaAuras = [];     // pulsing purple rings on Helixa-verified memories
 const LIME = 0x39FF14;    // active-node + walk-trail accent (wizard pick: bright green)
@@ -468,6 +479,7 @@ const pointer = new THREE.Vector2();
 let hovered = null;
 let walkHighlights = [];   // active walk animation nodes
 let walkTrails = [];       // trail lines for walk activation
+let trailPulses = [];      // traveling pulse spheres along trails
 let walkMode = 'bfs';      // 'bfs' (topology) | 'resonance' (activation spread)
 let searchResults = [];    // active search hit ids
 
@@ -580,6 +592,24 @@ function drawWalkTrail(fromId, toId) {
   }));
   scene.add(line);
   walkTrails.push(line);
+  // Spawn traveling pulse dots along the trail
+  const pulseCount = 3;
+  for (let pi = 0; pi < pulseCount; pi++) {
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 8, 8),
+      new THREE.MeshBasicMaterial({ color: LIME, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending })
+    );
+    dot.position.copy(a.three.position);
+    dot.userData = {
+      from: a.three.position.clone(),
+      to: b.three.position.clone(),
+      t: pi / pulseCount,  // staggered start
+      speed: 0.008 + Math.random() * 0.006,
+      age: 0
+    };
+    scene.add(dot);
+    trailPulses.push(dot);
+  }
   // Fade trail after 4s
   setTimeout(() => {
     line.material.opacity = 0;
@@ -598,6 +628,11 @@ function clearWalk() {
     if (l.geometry) l.geometry.dispose();
   });
   walkTrails = [];
+  trailPulses.forEach(d => {
+    scene.remove(d);
+    if (d.geometry) d.geometry.dispose();
+  });
+  trailPulses = [];
   searchResults = [];
   // Reset all node emissives
   for (const id in nodeMap) {
@@ -681,8 +716,12 @@ function openInspector(nodeId) {
       ${d.helixa ? `<div class="insp-helixa">🟦 Helixa #${escapeHtml(d.helixa)}</div>` : ''}
     </div>`;
   document.getElementById('inspector').classList.add('open');
+  if (paused) showConnectedForSelected();
 }
-window.closeInspector = () => document.getElementById('inspector').classList.remove('open');
+window.closeInspector = () => {
+  document.getElementById('inspector').classList.remove('open');
+  clearConnectedHighlights();
+};
 function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ─── DREAM CYCLE VISUALIZATION ──────────────────
@@ -751,6 +790,97 @@ function removeDreamViz() {
   dreamNodes.forEach(d => { if (d.target && d.type === 'reinforce') { d.target.scale.setScalar(1); } });
   dreamNodes = [];
 }
+
+// ─── PAUSE / PLAY BUFFER ─────────────────────────
+function togglePause() {
+  const btn = document.getElementById('pause-btn');
+  const timerEl = document.getElementById('pause-timer');
+  if (paused) {
+    resumeLive();
+    btn.innerHTML = '<span class="dot" style="background:#00E5FF"></span>pause';
+    timerEl.style.display = 'none';
+  } else {
+    pauseLive();
+    btn.innerHTML = '<span class="dot" style="background:#39FF14"></span>playing';
+    timerEl.style.display = 'block';
+    // Show connected links for selected node
+    showConnectedForSelected();
+  }
+}
+
+function pauseLive() {
+  paused = true;
+  frozen = true;
+  controls.autoRotate = false;
+  if (refreshInterval) clearInterval(refreshInterval);
+  // 5-minute auto-resume buffer
+  pauseEndTime = Date.now() + 5 * 60 * 1000;
+  pauseTimer = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((pauseEndTime - Date.now()) / 1000));
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    const timerEl = document.getElementById('pause-timer');
+    timerEl.textContent = mins + ':' + String(secs).padStart(2, '0');
+    if (remaining <= 0) resumeLive();
+  }, 1000);
+}
+
+function resumeLive() {
+  paused = false;
+  frozen = false;
+  controls.autoRotate = true;
+  if (pauseTimer) { clearInterval(pauseTimer); pauseTimer = null; }
+  const btn = document.getElementById('pause-btn');
+  btn.innerHTML = '<span class="dot" style="background:#00E5FF"></span>pause';
+  document.getElementById('pause-timer').style.display = 'none';
+  // Clear connection highlights
+  clearConnectedHighlights();
+  // Restart refresh interval
+  refreshInterval = setInterval(fetchMesh, 30000);
+}
+
+function clearConnectedHighlights() {
+  connectedLinks.forEach(l => { scene.remove(l); if (l.geometry) l.geometry.dispose(); });
+  connectedLinks = [];
+}
+
+function showConnectedForSelected() {
+  clearConnectedHighlights();
+  // Find the inspector's active node
+  const inspEl = document.getElementById('inspector');
+  if (!inspEl.classList.contains('open')) return;
+  const inspBody = document.getElementById('inspector-body');
+  const idMatch = inspBody.innerHTML.match(/#([^<]+)/);
+  if (!idMatch) return;
+  const nodeId = idMatch[1];
+  const entry = nodeMap[nodeId];
+  if (!entry) return;
+  // Draw bright links from this node to all connected nodes
+  const pos = entry.three.position;
+  for (const l of meshData.links) {
+    if (l.a === nodeId || l.b === nodeId) {
+      const otherId = l.a === nodeId ? l.b : l.a;
+      const other = nodeMap[otherId];
+      if (!other) continue;
+      const geo = new THREE.BufferGeometry().setFromPoints([pos, other.three.position]);
+      const pulseGlow = new THREE.MeshBasicMaterial({
+        color: LIME, transparent: true, opacity: 0.7 + l.strength * 0.3,
+        blending: THREE.AdditiveBlending
+      });
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+        color: LIME, transparent: true, opacity: 0.45 + l.strength * 0.3,
+        blending: THREE.AdditiveBlending
+      }));
+      scene.add(line);
+      connectedLinks.push(line);
+      // Also highlight the connected node
+      other.three.material.emissive = new THREE.Color(LIME);
+      other.three.material.emissiveIntensity = 1.0;
+      other.three.scale.setScalar(1.5);
+    }
+  }
+}
+
 window.addEventListener('pointermove', onPointerMove, { passive: true });
 window.addEventListener('pointerdown', onPointerDown, { passive: true });
 window.closeMobileDetail = () => document.getElementById('mobile-detail').classList.remove('open');
@@ -772,10 +902,17 @@ function animate() {
     }
   }
   if (!frozen) {
-    // Real mesh nodes: gentle breathing
+    // Real mesh nodes: gentle breathing (dream nodes pulse stronger + glow halo)
     for (const id in nodeMap) {
       const m = nodeMap[id].three;
-      m.scale.setScalar(1 + Math.sin(t*2.2 + m.userData.phase)*0.15);
+      const isDream = nodeMap[id].data.lane === 'dream';
+      const amp = isDream ? 0.30 : 0.15;
+      const freq = isDream ? 3.0 : 2.2;
+      m.scale.setScalar(1 + Math.sin(t*freq + m.userData.phase)*amp);
+      if (isDream) {
+        m.material.emissiveIntensity = 1.2 + Math.sin(t*3.5 + m.userData.phase)*0.45;
+        m.material.emissive = new THREE.Color(0x9775fa).multiplyScalar(0.8 + Math.sin(t*3.0)*0.2);
+      }
     }
     rings.forEach(r => { r.rotation.x += dt * r.userData.sx; r.rotation.z += dt * r.userData.sz; });
     // Helixa auras: purple pulse between 0.35-0.95 opacity at 1.8hz
@@ -792,6 +929,7 @@ function animate() {
     light1.intensity = 5 * breath;
     light2.intensity = 3.5 * breath;
   }
+  // Pulses and trails animate even when paused (visual cleanup)
   pulseWaves = pulseWaves.filter(p => {
     p.userData.scale += p.userData.speed;
     p.userData.opacity -= 0.012;
@@ -800,13 +938,29 @@ function animate() {
     p.material.opacity = p.userData.opacity;
     return true;
   });
+  // Traveling pulses along walk trails — lerp between from/to with wrap
+  trailPulses = trailPulses.filter(dot => {
+    dot.userData.age += 1;
+    dot.userData.t += dot.userData.speed;
+    if (dot.userData.age > 360) { scene.remove(dot); return false; }
+    dot.userData.t = dot.userData.t % 1.0;
+    dot.position.lerpVectors(dot.userData.from, dot.userData.to, dot.userData.t);
+    dot.material.opacity = 0.5 + 0.5 * Math.sin(dot.userData.t * Math.PI);
+    return true;
+  });
+  // Connected-link pulse animation (pause mode)
+  if (paused && connectedLinks.length) {
+    connectedLinks.forEach(l => {
+      l.material.opacity = 0.25 + Math.sin(t * 4.0) * 0.25;
+    });
+  }
   controls.update();
   renderer.render(scene, camera);
 }
 
 // ─── INIT ───────────────────────────────────────
 fetchMesh();
-setInterval(fetchMesh, 30000); // live refresh every 30s
+refreshInterval = setInterval(fetchMesh, 30000); // live refresh every 30s
 animate();
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -825,6 +979,7 @@ modeBtn.addEventListener('click', () => {
   modeBtn.innerHTML = '<span class="dot" style="background:' + (walkMode === 'bfs' ? '#00E5FF' : '#39FF14') + '"></span>' + (walkMode === 'bfs' ? 'topology' : 'resonance');
 });
 document.getElementById('dream-btn').addEventListener('click', runDream);
+document.getElementById('pause-btn').addEventListener('click', togglePause);
 // Live ticker — latest memory rotating
 async function startTicker() {
   try {
