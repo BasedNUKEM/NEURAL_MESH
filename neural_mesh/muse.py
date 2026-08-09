@@ -16,10 +16,20 @@ def template_muse(survivors: list, min_cluster: int = 3) -> list[str]:
     """Rule-based muse: group survivors by provenance, extract topical patterns.
 
     Produces:
-    1. A provenance-summary node per cluster with >= min_cluster members
+    1. A provenance-summary node per REAL cluster with >= min_cluster members
     2. A cross-cluster bridge node if multiple provenance clusters exist
+    3. A resonance leaderboard of top survivors
+
+    Echo-chamber guard (v0.26.0): nodes whose provenance is 'dream-muse'
+    (previous dream cycles) are excluded from cluster seeds, leaderboard,
+    and bridge counts. The mesh must NEVER synthesize from dream-of-dream.
     """
     insights = []
+
+    # Filter out self-referential dream-muse nodes (defense-in-depth — the
+    # caller (dream) also filters, but template_muse is a public API).
+    survivors = [n for n in survivors
+                 if (getattr(n, "provenance", "") or "") != "dream-muse"]
 
     # Cluster by provenance
     clusters: dict[str, list] = {}

@@ -22,10 +22,71 @@ No network. No signing. Pure local consolidation.
 """
 from __future__ import annotations
 
+import os
+import re
 import time
 from collections import defaultdict
 
 from .embed import cosine as _cosine
+
+# Echo-chamber guard (v0.26.0): the muse may ONLY synthesize from real-world
+# memory clusters. Nodes carrying this provenance were minted by previous dream
+# cycles; letting them re-enter the muse pool makes the mesh dream about its
+# own dreams (the 74% dream-muse share problem). They stay fully recallable —
+# they just can't seed NEW insights.
+_DREAM_PROVENANCE = "dream-muse"
+_DREAM_AUTHOR = "dream"
+
+# Regex to extract provenance name from dream summary content.
+_DREAM_SUMMARY_RE = re.compile(r"^\[dream (\w+)\]\s+(\S+)\s+cluster")
+
+
+def _real_survivors(survivors: list) -> list:
+    """Filter out self-referential dream-muse nodes from the muse survivor pool."""
+    return [n for n in survivors
+            if (getattr(n, "provenance", "") or "") != _DREAM_PROVENANCE
+            and (getattr(n, "by", "") or "") != _DREAM_AUTHOR]
+
+
+def _supersede_dream_duplicates(mesh, insight_content: str, new_node_id: str = ""):
+    """Archive-on-mint: supersede older dream-muse nodes covering the same facet.
+
+    Without this, each DREAM cycle stacks a new '[dream summary] cron-auto-seed
+    cluster ...' node on top of last cycle's, accumulating near-identical
+    duplicate insights forever.  When a new summary/bridge/leaderboard is minted,
+    any existing dream-muse node with the same content prefix is superseded.
+    """
+    nodes = mesh._load()
+    m = _DREAM_SUMMARY_RE.match(insight_content)
+    if m:
+        prov_name = m.group(2)
+        tag = f"[dream summary] {prov_name} cluster"
+        for n in nodes.values():
+            if n.id == new_node_id:
+                continue
+            if (not n.superseded_by and n.provenance == _DREAM_PROVENANCE
+                    and n.content.startswith(tag)):
+                n.superseded_by = "dream-cycle-refresh"
+                mesh._save(n)
+    elif insight_content.startswith("[dream bridge]"):
+        tag = "[dream bridge]"
+        for n in nodes.values():
+            if n.id == new_node_id:
+                continue
+            if (not n.superseded_by and n.provenance == _DREAM_PROVENANCE
+                    and n.content.startswith(tag)):
+                n.superseded_by = "dream-cycle-refresh"
+                mesh._save(n)
+    elif insight_content.startswith("[dream leaderboard]"):
+        tag = "[dream leaderboard]"
+        for n in nodes.values():
+            if n.id == new_node_id:
+                continue
+            if (not n.superseded_by and n.provenance == _DREAM_PROVENANCE
+                    and n.content.startswith(tag)):
+                n.superseded_by = "dream-cycle-refresh"
+                mesh._save(n)
+
 
 
 def _author_weight(mesh, node) -> float:
@@ -106,14 +167,26 @@ def dream(mesh, decay: float = 0.9, reinforce_k: int = 3, min_link: float = 0.05
             mesh._save(n)
             report["archived"] += 1
 
-    # M — Muse: synthesize insights from surviving clusters
+    # M — Muse: synthesize insights from surviving clusters (echo-chamber guarded)
     if muse_fn:
         survivors = [n for n in nodes.values()
                      if not n.superseded_by and n.resonance >= prune_below]
+        # echo-chamber guard (v0.26.0): the muse MUST NOT synthesize from
+        # dream-muse nodes — doing so makes the mesh dream about its own
+        # dreams. Dream summaries only reference real-world clusters.
+        survivors = _real_survivors(survivors)
+        max_insights = int(os.environ.get("DREAM_MAX_INSIGHTS", "5"))
+        minted = 0
         for ins in muse_fn(survivors):
+            if minted >= max_insights:
+                break
             node = mesh.add(ins, type=__import__("neural_mesh.node", fromlist=["MemoryType"]).MemoryType.SEMANTIC,
-                            lane="cold", provenance="dream-muse", by="dream", trust=0.85)
+                            lane="cold", provenance=_DREAM_PROVENANCE, by=_DREAM_AUTHOR, trust=0.85)
+            # supersede the previous cycle's summary/bridge/leaderboard
+            # for this same facet so insights never stack cycle-on-cycle.
+            _supersede_dream_duplicates(mesh, ins, new_node_id=node.id)
             report["insights"].append(node.content)
+            minted += 1
 
     return report
 
@@ -236,10 +309,11 @@ def dream_preview(mesh, decay: float = 0.9, reinforce_k: int = 3,
         if (n.resonance < prune_below or age_days > max_age_days) and aw < 0.5:
             archived_ids.append(n.id)
 
-    # M — Muse insights (run on copies — muse_fn only reads, returns strings)
+    # M — Muse insights (echo-chamber guarded: run on filtered copies)
     if muse_fn:
         survivors = [n for n in copies.values()
                      if not n.superseded_by and n.resonance >= prune_below]
+        survivors = _real_survivors(survivors)
         insights = muse_fn(survivors)
 
     return {
