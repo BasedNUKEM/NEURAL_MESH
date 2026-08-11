@@ -679,6 +679,43 @@ def mesh_audit():
     return jsonify({"total": len(results), "quarantined": results})
 
 
+# ─── ERC-8004 Reputation + Validation Feeds ─────────────── v0.27.0 ──────────
+
+@app.route("/mesh/erc8004/reputation", methods=["GET"])
+def erc8004_reputation():
+    """Public. ERC-8004-compliant reputation signal for a mesh agent.
+
+    Computes a giveFeedback-ready signal from live mesh trust, corroboration,
+    Helixa verification, and quarantine rates. Tag1 controls the primary
+    signal dimension (starred, corroborated, poisoned_rate, helixa_verified,
+    uptime, reachable).
+
+    Query params: ?agent_id=..., &tag1=starred (default: whole mesh, starred)
+    """
+    agent_id = request.args.get("agent_id", "")
+    tag1 = request.args.get("tag1", "starred")
+    if tag1 not in {"starred", "corroborated", "poisoned_rate",
+                    "helixa_verified", "uptime", "reachable"}:
+        return _json_error(f"unknown tag1: {tag1}", 400)
+
+    from neural_mesh.reputation import feedback_signal
+    sig = feedback_signal(mesh, agent_id=agent_id, tag1=tag1)
+    return jsonify(sig)
+
+
+@app.route("/mesh/erc8004/validation/<string:agent_id>", methods=["GET"])
+def erc8004_validation(agent_id: str):
+    """Public. Candidate Validation Provider summary — "has this agent behaved
+    honestly?" based on mesh consensus.
+
+    Returns ERC-8263-anchorable per-node content fingerprints so any validator
+    can recompute the honesty score from the evidence.
+    """
+    from neural_mesh.reputation import validation_summary
+    summary = validation_summary(mesh, agent_id=agent_id)
+    return jsonify(summary)
+
+
 # ─── Reader ────────────────────────────────────────────────────────────────
 
 @app.route("/mesh/answer", methods=["POST"])
