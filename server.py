@@ -327,6 +327,49 @@ def recall():
     })
 
 
+@app.route("/mesh/recall-paid", methods=["POST"])
+def recall_paid():
+    """x402 payment-gated recall.
+
+    Headers:
+      X-Payment-Proof: tx hash of x402 receipt on Base Mainnet
+      X-Recall-Tier: basic|deep|ultra (default: basic)
+
+    Body: {query, top_k?, lane?, alpha?}
+
+    Pricing:
+      basic  $0.01 — resonance, ≤10 results
+      deep   $0.05 — yantrikdb bridge, ≤50 results, proof cards
+      ultra  $0.10 — hybrid + yantrikdb, ≤100 results, proof cards + trust scores
+    """
+    from neural_mesh.x402_recall import PaidRecallGate
+
+    proof_header = request.headers.get("X-Payment-Proof", "").strip()
+    tier = request.headers.get("X-Recall-Tier", "basic").strip().lower()
+    data = request.get_json(silent=True) or {}
+    query = data.get("query", "").strip()
+
+    if not proof_header:
+        return _json_error("X-Payment-Proof header required (x402 receipt tx hash)", 402)
+    if not query:
+        return _json_error("query is required", 400)
+
+    gate = PaidRecallGate(mesh)
+    result = gate.paid_recall(
+        query=query,
+        tier=tier,
+        proof_header=proof_header,
+        top_k=data.get("top_k", 10),
+        lane=data.get("lane"),
+        alpha=data.get("alpha", 0.9),
+    )
+
+    if not result.get("ok"):
+        return jsonify(result), 402
+
+    return jsonify(result)
+
+
 @app.route("/mesh/cycle", methods=["POST"])
 def memory_cycle():
     """Run pointer-safe ingest → routed recall → lanes → sleep.

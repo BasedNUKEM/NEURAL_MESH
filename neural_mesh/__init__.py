@@ -54,6 +54,11 @@ def __getattr__(name):
             from .integrations.yantrikdb_bridge import YantrikDBBridge as _YB
             _LAZY["YantrikDBBridge"] = _YB
         return _LAZY["YantrikDBBridge"]
+    if name == "PaidRecallGate":
+        if "PaidRecallGate" not in _LAZY:
+            from .x402_recall import PaidRecallGate as _PRG
+            _LAZY["PaidRecallGate"] = _PRG
+        return _LAZY["PaidRecallGate"]
     raise AttributeError(f"module 'neural_mesh' has no attribute {name!r}")
 
 __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
@@ -70,5 +75,7 @@ __all__ = ["Mesh", "MemoryType", "export_mesh", "import_mesh",
            "answer_with_proofs", "citation_for_proof",
            "RateLimiter", "auth_ok", "origin_allowed", "safe_path",
            "LLMReader", "QAJudge", "run_qa_eval", "load_test_set",
-           "HelixaSigner"]
+           "HelixaSigner",
+           "PaidRecallGate", "TIERS", "SERVICE_NAME", "verify_receipt_onchain",
+           "RECEIPT_CONTRACT", "FEE_RECIPIENT", "BASE_RPC"]
 __version__ = "0.27.0"
