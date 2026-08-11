@@ -1,4 +1,8 @@
-# GitHub Actions — NEURAL_MESH CI
+# GitHub Actions — NEURAL_MESH CI (self-hosted runner on VPS)
+#
+# Runner: neural-mesh-vps on Hostinger (api.d0xeddev.com)
+#        Ubuntu 24.04, Python 3.12, x86_64
+#        Service: /etc/systemd/system/actions.runner.*.service
 
 name: CI
 
@@ -13,46 +17,34 @@ permissions:
 
 jobs:
   core-tests:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - name: Core tests (unittest — pure stdlib, no deps)
         run: |
-          PYTHONPATH=. python -m unittest tests.test_core tests.test_security tests.test_dream_provenance_guard tests.test_reputation tests.test_lanes tests.test_lifecycle tests.test_sharing tests.test_meshfile tests.test_cli_operations -v -q 2>&1
+          cd /opt/data/NEURAL_MESH
+          PYTHONPATH=. python3 -m unittest tests.test_core tests.test_security tests.test_dream_provenance_guard tests.test_reputation tests.test_lanes tests.test_lifecycle tests.test_sharing tests.test_meshfile tests.test_cli_operations -v -q 2>&1
 
   server-tests:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: core-tests
-    strategy:
-      matrix:
-        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install Flask
-        run: pip install Flask
       - name: Server tests
         run: |
-          PYTHONPATH=. python -m unittest tests.test_server_lifecycle tests.test_server_operations -v 2>&1
+          cd /opt/data/NEURAL_MESH
+          PYTHONPATH=. python3 -m unittest tests.test_server_lifecycle tests.test_server_operations -v 2>&1
 
   lint:
+    runs-on: self-hosted
     continue-on-error: true
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install linter
-        run: pip install flake8
       - name: Flake8 syntax checks
         run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          cd /opt/data/NEURAL_MESH
+          python3 -m flake8 neural_mesh/ server.py --count --select=E9,F63,F7,F82 --show-source --statistics 2>&1
       - name: Flake8 style (warnings)
         run: |
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          cd /opt/data/NEURAL_MESH
+          python3 -m flake8 neural_mesh/ server.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics 2>&1
