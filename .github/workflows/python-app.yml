@@ -22,7 +22,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Core tests (unittest — pure stdlib, no deps)
         run: |
-          cd /opt/data/NEURAL_MESH
           PYTHONPATH=. python3 -m unittest tests.test_core tests.test_security tests.test_dream_provenance_guard tests.test_reputation tests.test_lanes tests.test_lifecycle tests.test_sharing tests.test_meshfile tests.test_cli_operations -v -q 2>&1
 
   server-tests:
@@ -32,7 +31,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Server tests
         run: |
-          cd /opt/data/NEURAL_MESH
           PYTHONPATH=. python3 -m unittest tests.test_server_lifecycle tests.test_server_operations -v 2>&1
 
   lint:
@@ -42,9 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Flake8 syntax checks
         run: |
-          cd /opt/data/NEURAL_MESH
           python3 -m flake8 neural_mesh/ server.py --count --select=E9,F63,F7,F82 --show-source --statistics 2>&1
       - name: Flake8 style (warnings)
         run: |
-          cd /opt/data/NEURAL_MESH
           python3 -m flake8 neural_mesh/ server.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics 2>&1
