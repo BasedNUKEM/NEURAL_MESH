@@ -930,8 +930,26 @@ class TestLoCoMoQA(unittest.TestCase):
         self.assertEqual(metrics["total"], 0)
         self.assertEqual(metrics["mean"], 0.0)
 
+try:
+    import eth_account  # noqa: F401
+    _ETH_ACCOUNT_AVAILABLE = True
+except ImportError:
+    _ETH_ACCOUNT_AVAILABLE = False
+
+try:
+    from yantrikdb_hermes_plugin.embedded import YantrikDBEmbedded  # noqa: F401
+    _YANTRIKDB_AVAILABLE = True
+except ImportError:
+    _YANTRIKDB_AVAILABLE = False
+
+
 class TestHelixaSignerLive(unittest.TestCase):
     """Live Helixa API signer — tests use a throwaway test key, NEVER the real one."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not _ETH_ACCOUNT_AVAILABLE:
+            raise unittest.SkipTest("helixa_signer requires eth_account (not installed)")
 
     TEST_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"  # Hardhat #0
 
@@ -1006,6 +1024,11 @@ class TestHelixaSignerLive(unittest.TestCase):
 
 class TestYantrikDBBridge(unittest.TestCase):
     """Tests for the optional YantrikDB memory / contradiction bridge."""
+
+    @classmethod
+    def setUpClass(cls):
+        if not _YANTRIKDB_AVAILABLE:
+            raise unittest.SkipTest("yantrikdb bridge requires yantrikdb (not installed)")
 
     def setUp(self):
         from neural_mesh import Mesh
