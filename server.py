@@ -33,12 +33,19 @@ AUTH_ENDPOINTS = {"add", "memory_cycle", "sleep_mesh", "consolidate_mesh",
                   "pointer_put", "pointer_summary", "dream", "export_mesh",
                   "merge", "stamp", "intuition_ingest_receipts", "eval_qa",
                   "yantrikdb_ingest", "yantrikdb_think", "helixa_attest_node",
-                  "peer_query"}
+                  "peer_query", "mesh_audit"}
 POLICY_FIELDS = {"trust", "cap_trust", "allow_new", "allow_merge"}
 
 
 def _json_error(message: str, status: int):
     return jsonify({"ok": False, "error": message}), status
+
+
+def _tool_meta(tool: str, origin: str = "server") -> dict:
+    """Provenance stamp for tool-call chains — which tool was used to add
+    a node and from where. Surfaces in node.meta['tool_call'] for audit."""
+    import time
+    return {"tool_call": {"tool": tool, "origin": origin, "ts": time.time()}}
 
 
 @app.before_request
@@ -92,7 +99,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.26.0",
+        "version": "0.27.0",
         "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
@@ -224,12 +231,18 @@ def brain_walk():
 def add():
     """Body: {content, type, provenance?, supersedes?, meta?, by?}"""
     data = request.get_json()
+    # tool-call provenance: every node added via the REST API carries
+    # meta["tool_call"] so we can audit "which tool brought this in?"
+    extra = _tool_meta("mesh/add")
+    user_meta = data.get("meta", {})
+    if user_meta:
+        extra.update(user_meta)
     node = mesh.add(
         content=data["content"],
         type=MemoryType(data.get("type", "semantic")),
         provenance=data.get("provenance", ""),
         supersedes=data.get("supersedes", ""),
-        meta=data.get("meta"),
+        meta=extra,
         by=data.get("by", ""),
     )
     return jsonify({"id": node.id, "content": node.content, "type": node.type.value})
@@ -532,9 +545,11 @@ def public_mesh():
     import json
     for r in rows:
         content = r["content"]
+        meta = json.loads(r["meta"]) if r["meta"] else {}
+        if meta.get("lane") == "quarantine":
+            continue  # quarantine lane is never public
         if q and q.lower() not in content.lower():
             continue
-        meta = json.loads(r["meta"]) if r["meta"] else {}
         results.append({
             "id": r["id"],
             "content": content[:500],
@@ -577,9 +592,90 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
-        "version": "0.26.0",
+        "version": "0.27.0",
         "provenance_breakdown": provenance_breakdown,
     })
+
+
+# ─── ERC-8004 Agent Identity Manifest ────────────────────── v0.27.0 ──────────
+
+@app.route("/mesh/erc8004/manifest", methods=["GET"])
+def erc8004_manifest():
+    """Public. ERC-8004 registration file (type=registration-v1).
+
+    This is the canonical metadata for NEURAL_MESH as an on-chain agent.
+    It is what the IdentityRegistry tokenURI resolves to — name, description,
+    services, supported trust models, x402 support, and registrations.
+
+    The mesh's Helixa agent #5287 is wired into the registrations array.
+    Actual on-chain minting is a SEPARATE, key-held, human-GO step:
+    ``scripts/erc8004_register.py`` on Base Mainnet IdentityRegistry
+    (0x8004A169...).
+
+    See https://eips.ethereum.org/EIPS/eip-8004
+    """
+    stats = mesh.stats()
+    return jsonify({
+        "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+        "name": "NEURAL_MESH",
+        "description": (
+            "Self-organizing typed-graph agentic memory engine. "
+            "Cross-agent corroboration, resonance retrieval, DREAM "
+            "consolidation, versioned truth, OWASP ASI06 memory poisoning "
+            "defenses (ContentValidator + quarantine lane + trust decay). "
+            f"{stats['total']} nodes live, {stats.get('quarantined', 0)} quarantined. "
+            "Trust scores feed into ERC-8004 Reputation Registry."
+        ),
+        "image": "https://api.d0xeddev.com/brain/og.png",
+        "services": [
+            {"name": "web", "endpoint": "https://api.d0xeddev.com/brain"},
+            {"name": "MCP", "endpoint": "https://api.d0xeddev.com/"},
+            {"name": "mesh-api", "endpoint": "https://api.d0xeddev.com/mesh"},
+            {"name": "x402", "endpoint": "https://api.d0xeddev.com/x402/record-receipt"},
+        ],
+        "x402Support": True,
+        "active": True,
+        "registrations": [
+            {
+                "agentId": 5287,
+                "agentRegistry": ("eip155:8453:"
+                                  "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"),
+                "helixaAgentId": 60155,
+            }
+        ],
+        "supportedTrust": [
+            "reputation",
+            "crypto-economic",
+            "cross-source-corroboration",
+        ],
+        "version": "0.27.0",
+    })
+
+
+# ─── Security Audit ───────────────────────────────────────── v0.27.0 ──────────
+
+@app.route("/mesh/audit", methods=["GET"])
+def mesh_audit():
+    """AUTH. List all quarantined nodes — explicit security audit.
+    Returns full content (not truncated) because audit is a privileged path."""
+    nodes = mesh.audit_quarantine()
+    results = []
+    for n in nodes:
+        results.append({
+            "id": n.id,
+            "content": n.content[:1000],
+            "type": n.type.value,
+            "lane": n.lane,
+            "trust": n.trust,
+            "provenance": n.provenance,
+            "by": n.by,
+            "resonance": n.resonance,
+            "security": n.meta.get("security", {}),
+            "tool_call": n.meta.get("tool_call"),
+            "created_at": n.created_at,
+        })
+    return jsonify({"total": len(results), "quarantined": results})
+
 
 # ─── Reader ────────────────────────────────────────────────────────────────
 

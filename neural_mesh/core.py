@@ -12,18 +12,30 @@ import time
 from .embed import embed
 from .node import MemoryNode, MemoryType
 from .resonance import retrieve as _resonance_retrieve, _select_backend
+from .security import (QUARANTINE_LANE, ContentValidator, content_fingerprint,
+                       corroboration_bump, is_corroborated)
 
 
 class Mesh:
     def __init__(self, db_path: str = ":memory:", embedder=embed, link_threshold=0.30,
-                 resonance_backend: str = "auto"):
+                 resonance_backend: str = "auto",
+                 validator: "ContentValidator | None | bool" = True,
+                 quarantine_policy: str = "strict"):
         if resonance_backend not in {"auto", "python", "rust"}:
             raise ValueError("resonance_backend must be 'auto', 'python', or 'rust'")
+        if quarantine_policy not in {"strict", "malicious-only", "off"}:
+            raise ValueError("quarantine_policy must be 'strict', 'malicious-only', or 'off'")
         self.db = sqlite3.connect(db_path)
         self.db.row_factory = sqlite3.Row
         self.embedder = embedder
         self.link_threshold = link_threshold
         self.resonance_backend = resonance_backend
+        # Memory-poisoning defense (OWASP ASI06): content is scanned before it
+        # enters the mesh. validator=False disables the scan (tests/benchmarks
+        # that intentionally store hostile-looking text).
+        self.validator = validator if isinstance(validator, ContentValidator) else (
+            ContentValidator() if validator else None)
+        self.quarantine_policy = quarantine_policy
         self._init_db()
         # In-memory node cache so repeated retrieval doesn't reload SQLite every
         # call. `add`/`sleep`/`_supersede` invalidate it via _invalidate_cache.
@@ -86,6 +98,96 @@ class Mesh:
             self._save(node)
 
     # ---------- write ----------
+    def _scan_content(self, content: str) -> "dict | None":
+        """Run the ContentValidator (if enabled). Returns a quarantine
+        directive dict or None for clean content.
+
+        Quarantine policy:
+          * malicious  -> always quarantine (zero resonance, trust capped 0.05)
+          * suspicious -> quarantine under 'strict' policy, else pass through
+            with a warning tag
+        """
+        if self.validator is None:
+            return None
+        return self._directive(
+            self.validator.scan(content),
+            strict_policy=self.quarantine_policy)
+
+    @staticmethod
+    def _directive(verdict, strict_policy: str = "strict") -> "dict | None":
+        """verdict -> quarantine directive or None (clean content).
+
+        quarantine_policy: 'strict' (malicious+suspicious→quarantine),
+        'malicious-only' (only malicious→quarantine), 'off' (scan, never quarantine).
+        """
+        if verdict.is_safe:
+            return None
+        if strict_policy == "off":
+            quarantinable = False
+        elif strict_policy == "malicious-only":
+            quarantinable = verdict.is_malicious
+        else:  # strict
+            quarantinable = verdict.is_malicious or verdict.is_suspicious
+        return {
+            "quarantine": quarantinable,
+            "verdict": verdict.level,
+            "score": verdict.score,
+            "patterns": [p["name"] for p in verdict.patterns],
+        }
+
+    def _apply_scan(self, node: MemoryNode, scan: "dict | None"):
+        """Apply a scan directive to a node: quarantine lane + zero resonance
+        + cap trust + tag meta; or tag-and-allow for suspicious (audit mode)."""
+        if not scan:
+            return
+        node.meta = dict(node.meta or {})
+        node.meta["security"] = {
+            "verdict": scan["verdict"],
+            "score": scan["score"],
+            "patterns": scan["patterns"],
+            "quarantined": scan["quarantine"],
+        }
+        if scan["quarantine"]:
+            node.lane = QUARANTINE_LANE
+            node.resonance = 0.0
+            node.trust = min(node.trust, 0.05)
+            node.links = {}          # quarantined nodes never link outward
+
+    def _corroborate(self, node: MemoryNode):
+        """Cross-source corroboration: if another live node from a DIFFERENT
+        agent/provenance already asserts this fact, both get the corroboration
+        trust bumper and the flag. This is the mesh's consensus defense — a
+        poisoned claim confirmed by no one stays low-trust and decays."""
+        fp = content_fingerprint(node.content)
+        for other in self._load().values():
+            if other.id == node.id or other.superseded_by:
+                continue
+            if other.lane == QUARANTINE_LANE:
+                continue
+            if content_fingerprint(other.content) != fp:
+                continue
+            same_source = (
+                (other.agent_id and other.agent_id == node.agent_id)
+                or (other.provenance and other.provenance == node.provenance)
+                or (other.by and other.by == node.by)
+            )
+            if same_source:
+                continue
+            # independent confirmation -> bumper both ways
+            node.meta = dict(node.meta or {})
+            node.meta["corroborated"] = True
+            node.meta["corroborating_sources"] = sorted({
+                other.agent_id or other.provenance or other.by or "anon",
+                node.agent_id or node.provenance or node.by or "anon",
+            })
+            node.trust = corroboration_bump(node.trust, other.trust)
+            other.meta = dict(other.meta or {})
+            other.meta["corroborated"] = True
+            other.meta["corroborating_sources"] = node.meta["corroborating_sources"]
+            other.trust = corroboration_bump(other.trust, node.trust)
+            self._save(other)
+            return
+
     def add(self, content: str, type: MemoryType = MemoryType.SEMANTIC,
             lane: str = "hot", provenance: str = "", prospective_at: float = 0.0,
             supersedes: str = "", agent_id: str = "", trust: float = 1.0,
@@ -105,39 +207,59 @@ class Mesh:
                 node.meta.update(meta)
             if extra_meta:
                 node.meta.update(extra_meta)
+        # Memory poisoning defense: scan BEFORE the node becomes retrievable.
+        scan = self._scan_content(content)
+        self._apply_scan(node, scan)      # tags meta; quarantines if flagged
+        if not (scan and scan["quarantine"]):
+            self._corroborate(node)
         # Seed resonance from trust so fresh high-trust facts are immediately
         # retrievable/distillable even before a sleep() replay pass refreshes it.
-        node.resonance = trust
+        node.resonance = node.trust if node.lane != QUARANTINE_LANE else 0.0
         if prospective_at:
             node.links["__prospective_at__"] = prospective_at
         self._save(node)
         if supersedes:
             self._supersede(supersedes, node)
-        self._auto_link(node)
+        if node.lane != QUARANTINE_LANE:
+            self._auto_link(node)
         return node
 
     def add_many(self, contents: list[str], type: str = MemoryType.SEMANTIC,
                  lane: str = "hot", provenance: str = "", trust: float = 0.5,
+                 agent_id: str = "", by: str = "", meta: "dict | None" = None,
                  autolink: bool = True) -> list[MemoryNode]:
         """Bulk ingest. Embeds in batches (fast path for big corpora like
-        LoCoMo) and links only if `autolink` is set. Returns saved nodes."""
+        LoCoMo) and links only if `autolink` is set. Returns saved nodes.
+        Each item passes the content scan; flagged items quarantine."""
         assert contents, "nothing to add"
         if hasattr(self.embedder, "embed_many"):
             embs = self.embedder.embed_many(list(contents))
         else:
             embs = [self.embedder(c) for c in contents]
+        if self.validator is not None:
+            verdicts = self.validator.scan_many(list(contents))
+            scans = [self._directive(v, strict_policy=self.quarantine_policy)
+                     for v in verdicts]
+        else:
+            scans = [None] * len(contents)
         nodes = []
-        for c, emb in zip(contents, embs):
+        for c, emb, scan in zip(contents, embs, scans):
             n = MemoryNode(id="", type=type, content=c, embedding=emb,
                            lane=lane, provenance=provenance, trust=trust,
                            resonance=trust, created_at=time.time(),
-                           superseded_by="", conflict_group="")
+                           superseded_by="", conflict_group="", agent_id=agent_id,
+                           by=by or agent_id or provenance or "self")
+            if meta:
+                n.meta = dict(meta)
+            if scan and scan["quarantine"]:
+                self._apply_scan(n, scan)
             self._save(n)
             nodes.append(n)
         if autolink:
             self._invalidate_cache()
             for n in nodes:
-                self._auto_link(n)
+                if n.lane != QUARANTINE_LANE:
+                    self._auto_link(n)
         return nodes
 
     def _supersede(self, old_id: str, new_node: MemoryNode):
@@ -216,11 +338,22 @@ class Mesh:
             self._lex_cache[content] = cached
         return cached
 
-    def _live_nodes(self, lane: "str | None" = None):
-        if lane not in (None, "hot", "cold"):
-            raise ValueError("lane must be 'hot', 'cold', or None")
-        return [n for n in self._load().values()
-                if not n.superseded_by and (lane is None or n.lane == lane)]
+    def _live_nodes(self, lane: "str | None" = None,
+                    include_quarantine: bool = False):
+        if lane not in (None, "hot", "cold", QUARANTINE_LANE):
+            raise ValueError("lane must be 'hot', 'cold', 'quarantine', or None")
+        nodes = self._load().values()
+        if lane is not None:
+            return [n for n in nodes if not n.superseded_by and n.lane == lane]
+        if not include_quarantine:
+            nodes = (n for n in nodes if n.lane != QUARANTINE_LANE)
+        return [n for n in nodes if not n.superseded_by]
+
+    def audit_quarantine(self) -> "list[MemoryNode]":
+        """Explicit audit view of the quarantine lane. This is the ONLY
+        retrieval path that surfaces quarantined content — used by security
+        tooling, never by default recall."""
+        return self._live_nodes(lane=QUARANTINE_LANE)
 
     def dense_recall(self, query: str, top_k: int = 5, writeback: bool = False,
                      lane: "str | None" = None):
@@ -270,14 +403,25 @@ class Mesh:
 
     # ---------- SLEEP: replay -> strengthen -> prune ----------
     def sleep(self, prune_below: float = 0.05, max_age_days: float = 30.0,
-              reflect_fn=None) -> dict:
+              reflect_fn=None, unverified_decay: float = 0.85) -> dict:
         nodes = self._load()
         now = time.time()
         pruned, promoted = 0, 0
+        decayed = 0
         for n in list(nodes.values()):
             if n.superseded_by:
                 continue
+            if n.lane == QUARANTINE_LANE:
+                # Quarantine is preserved for audit, never reinforced or pruned
+                # by the normal cycle.
+                continue
             age_days = (now - n.last_accessed) / 86400.0
+            # Memory poisoning defense: unverified claims decay every cycle.
+            # Corroborated nodes (cross-source confirmation / verified Helixa
+            # stamp / fused agent_id) are exempt — they earned their trust.
+            if not is_corroborated(n) and unverified_decay > 0:
+                n.trust = max(0.0, round(n.trust * unverified_decay, 4))
+                decayed += 1
             # resonance decays with age unless reinforced by access
             n.resonance = max(0.0, n.resonance * (0.9 ** age_days))
             # strengthen via sleep replay (re-embed to refresh the trace)
@@ -291,12 +435,14 @@ class Mesh:
         # reflection: synthesize a new semantic insight from surviving nodes
         insights = []
         if reflect_fn:
-            insights = reflect_fn([n for n in nodes.values() if not n.superseded_by])
+            insights = reflect_fn([n for n in nodes.values()
+                                   if not n.superseded_by
+                                   and n.lane != QUARANTINE_LANE])
             for ins in insights:
                 self.add(ins, type=MemoryType.SEMANTIC, lane="cold",
                          provenance="sleep-reflection")
                 promoted += 1
-        return {"pruned": pruned, "insights": len(insights)}
+        return {"pruned": pruned, "insights": len(insights), "decayed": decayed}
 
     # ---------- DISTILL: LoRA-ready output ----------
     def distill(self, min_trust: float = 0.6, min_resonance: float = 0.1,
@@ -321,6 +467,7 @@ class Mesh:
         nodes = self._load()
         live = [n for n in nodes.values()
                 if not n.superseded_by
+                and n.lane != QUARANTINE_LANE
                 and n.trust >= min_trust
                 and n.resonance >= min_resonance]
         pairs = []
@@ -368,8 +515,10 @@ class Mesh:
         for n in live:
             by_type[n.type.value] = by_type.get(n.type.value, 0) + 1
         hot = sum(1 for n in live if n.lane == "hot")
+        cold = sum(1 for n in live if n.lane == "cold")
+        quarantined = sum(1 for n in live if n.lane == QUARANTINE_LANE)
         return {"total": len(live), "by_type": by_type, "hot": hot,
-                "cold": len(live) - hot,
+                "cold": cold, "quarantined": quarantined,
                 "resonance_backend": _select_backend(self.resonance_backend)}
 
 

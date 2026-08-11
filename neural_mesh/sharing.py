@@ -74,6 +74,8 @@ def merge_peer_mesh(local_mesh, peer_file: str,
 
     Rules:
       * incoming node trust is scaled by `policy.effective_trust`.
+      * EVERY peer node passes local_mesh's ContentValidator (if enabled);
+        malicious nodes are quarantined, not merged.
       * if a local node has the same content hash, they FUSE (trust combines,
         links union, agent_id becomes a set-like "a+b").
       * otherwise the peer node is added, tagged with its `agent_id`.
@@ -81,14 +83,17 @@ def merge_peer_mesh(local_mesh, peer_file: str,
 
     Returns a summary dict (counts + trust deltas).
     """
+    from .security import QUARANTINE_LANE
+
     policy = policy or PeerPolicy()
     staged = _StagedMesh()
     import_mesh(peer_file, staged, reembed=reembed)
     peer_nodes = staged._load()
 
-    added, fused, skipped = 0, 0, 0
+    added, fused, skipped, quarantined = 0, 0, 0, 0
     trust_delta = 0.0
     local_nodes = local_mesh._load()
+    validator = getattr(local_mesh, "validator", None)
 
     # index local by content hash for merge lookup
     local_by_hash: dict[str, list[MemoryNode]] = {}
@@ -102,6 +107,20 @@ def merge_peer_mesh(local_mesh, peer_file: str,
         pn.trust = policy.effective_trust(pn.trust)
         pn.agent_id = pn.agent_id or peer_id or "peer"
         chash = _content_hash(pn.content)
+
+        # Federation safety gate: scan peer content BEFORE it touches the
+        # live mesh. Malicious content lands in quarantine.
+        if validator is not None:
+            verdict = validator.scan(pn.content)
+            if verdict.is_malicious:
+                pn.lane = QUARANTINE_LANE
+                pn.trust = min(pn.trust, 0.05)
+                pn.resonance = 0.0
+                pn.links = {}
+                pn.provenance = (pn.provenance or "unknown") + f"|peer-quarantined:{pn.agent_id}"
+                local_mesh._save(pn)
+                quarantined += 1
+                continue
 
         matches = local_by_hash.get(chash, [])
         if matches and policy.allow_merge:
@@ -130,6 +149,7 @@ def merge_peer_mesh(local_mesh, peer_file: str,
             skipped += 1
 
     return {"added": added, "fused": fused, "skipped": skipped,
+            "quarantined": quarantined,
             "trust_delta": round(trust_delta, 4),
             "peer": peer_id or "(anonymous)"}
 
