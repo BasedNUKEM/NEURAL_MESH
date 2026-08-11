@@ -1,0 +1,155 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+
+  <defs>
+    <!-- Panel clip paths to keep content inside -->
+    <clipPath id="clipP1"><rect x="20" y="50" width="340" height="560"/></clipPath>
+    <clipPath id="clipP2"><rect x="400" y="50" width="350" height="560"/></clipPath>
+    <clipPath id="clipP3"><rect x="770" y="50" width="410" height="560"/></clipPath>
+
+    <!-- Base blue pixel texture -->
+    <pattern id="pixelGrid" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="#001a55"/>
+      <rect x="0" y="0" width="2" height="2" fill="#002277" opacity="0.6"/>
+      <rect x="4" y="4" width="2" height="2" fill="#002277" opacity="0.4"/>
+      <rect x="6" y="2" width="1" height="1" fill="#0033aa" opacity="0.3"/>
+    </pattern>
+
+    <!-- Subtle block pattern overlay for sections -->
+    <pattern id="blockNoise" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="none"/>
+      <rect x="2" y="2" width="4" height="4" fill="#ffffff" opacity="0.015"/>
+      <rect x="10" y="8" width="3" height="3" fill="#ffffff" opacity="0.01"/>
+      <rect x="6" y="12" width="5" height="2" fill="#ffffff" opacity="0.012"/>
+    </pattern>
+
+    <!-- Glow filter for the node icon -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Panel base gradient -->
+    <linearGradient id="panelBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#001e6b"/>
+      <stop offset="100%" stop-color="#001248"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#001240"/>
+  <rect width="1200" height="630" fill="url(#pixelGrid)"/>
+  <rect width="1200" height="630" fill="url(#blockNoise)"/>
+
+  <!-- Section divider lines -->
+  <line x1="380" y1="60" x2="380" y2="590" stroke="#0052FF" stroke-width="1" opacity="0.5"/>
+  <line x1="770" y1="60" x2="770" y2="590" stroke="#0052FF" stroke-width="1" opacity="0.5"/>
+
+  <!-- "Based" corner marker top-right -->
+  <text x="1160" y="38" text-anchor="end" fill="#0052FF" font-family="monospace" font-size="11" opacity="0.8">BASED BLUEPRINT</text>
+
+  <g clip-path="url(#clipP1)">
+    <!-- Section background -->
+    <rect x="20" y="50" width="340" height="560" fill="url(#panelBg)" rx="4" opacity="0.8"/>
+
+    <!-- Stage number -->
+    <text x="190" y="115" text-anchor="middle" fill="#0052FF" font-family="monospace" font-size="12" opacity="0.6">STAGE 01</text>
+
+    <!-- Codename -->
+    <text x="190" y="220" text-anchor="middle" fill="#ffffff" font-family="'Courier New', monospace" font-size="56" font-weight="900" letter-spacing="12">INGEST</text>
+
+    <!-- Date -->
+    <text x="190" y="260" text-anchor="middle" fill="#3b82f6" font-family="monospace" font-size="14" opacity="0.8">JANUARY 2026</text>
+
+    <!-- Description lines -->
+    <text x="190" y="330" text-anchor="middle" fill="#8899cc" font-family="monospace" font-size="13">
+      <tspan x="190" dy="0">Self-organizing agent</tspan>
+      <tspan x="190" dy="20">memory that collects</tspan>
+      <tspan x="190" dy="20">semantic, episodic,</tspan>
+      <tspan x="190" dy="20">and associative facts</tspan>
+    </text>
+
+    <!-- Mini node icon -->
+    <circle cx="190" y="420" r="6" fill="#00d4ff" opacity="0.8" filter="url(#glow)"/>
+    <circle cx="220" y="440" r="4" fill="#ff00aa" opacity="0.6" filter="url(#glow)"/>
+    <circle cx="160" y="445" r="5" fill="#00ff88" opacity="0.6" filter="url(#glow)"/>
+    <line x1="190" y1="420" x2="220" y2="440" stroke="#00d4ff" stroke-width="0.5" opacity="0.3"/>
+    <line x1="190" y1="420" x2="160" y2="445" stroke="#00ff88" stroke-width="0.5" opacity="0.3"/>
+  </g>
+
+  <g clip-path="url(#clipP2)">
+    <rect x="400" y="50" width="350" height="560" fill="url(#panelBg)" rx="4" opacity="0.8"/>
+
+    <text x="575" y="115" text-anchor="middle" fill="#0052FF" font-family="monospace" font-size="12" opacity="0.6">STAGE 02</text>
+
+    <text x="575" y="220" text-anchor="middle" fill="#ffffff" font-family="'Courier New', monospace" font-size="56" font-weight="900" letter-spacing="10">RESONANCE</text>
+
+    <text x="575" y="260" text-anchor="middle" fill="#3b82f6" font-family="monospace" font-size="14" opacity="0.8">JULY 2026</text>
+
+    <!-- Stats block -->
+    <text x="575" y="320" text-anchor="middle" fill="#8899cc" font-family="monospace" font-size="13">
+      <tspan x="575" dy="0">Weighted activation spread</tspan>
+      <tspan x="575" dy="20">across 2-hop ego graphs</tspan>
+    </text>
+    <text x="575" y="370" text-anchor="middle" fill="#00ff88" font-family="monospace" font-size="15">1.63× retrieval speedup</text>
+    <text x="575" y="392" text-anchor="middle" fill="#00d4ff" font-family="monospace" font-size="12">exact top-10 parity</text>
+
+    <!-- Speed indicator bars -->
+    <rect x="460" y="460" width="40" height="8" fill="#ff00aa" opacity="0.7" rx="2"/>
+    <rect x="503" y="460" width="70" height="8" fill="#ff00aa" opacity="0.5" rx="2"/>
+    <text x="650" y="468" fill="#ff00aa" font-family="monospace" font-size="12" opacity="0.8">PYTHON</text>
+    <rect x="460" y="480" width="65" height="8" fill="#00ff88" opacity="0.8" rx="2"/>
+    <rect x="528" y="480" width="110" height="8" fill="#00ff88" opacity="0.6" rx="2"/>
+    <text x="650" y="488" fill="#00ff88" font-family="monospace" font-size="12" opacity="0.8">RUST</text>
+  </g>
+
+  <g clip-path="url(#clipP3)">
+    <rect x="770" y="50" width="410" height="560" fill="url(#panelBg)" rx="4" opacity="0.8"/>
+
+    <text x="975" y="115" text-anchor="middle" fill="#0052FF" font-family="monospace" font-size="12" opacity="0.6">STAGE 03</text>
+
+    <text x="975" y="220" text-anchor="middle" fill="#ffffff" font-family="'Courier New', monospace" font-size="56" font-weight="900" letter-spacing="14">DREAM</text>
+
+    <text x="975" y="260" text-anchor="middle" fill="#3b82f6" font-family="monospace" font-size="14" opacity="0.8">SOON™</text>
+
+    <text x="975" y="330" text-anchor="middle" fill="#8899cc" font-family="monospace" font-size="13">
+      <tspan x="975" dy="0">Autonomous LLM-guided</tspan>
+      <tspan x="975" dy="20">memory consolidation</tspan>
+      <tspan x="975" dy="20">and associative dreaming</tspan>
+      <tspan x="975" dy="35" fill="#3b82f6" font-size="12" opacity="0.7">+ native account abstraction</tspan>
+    </text>
+
+    <!-- Dream nodes -->
+    <circle cx="945" y="460" r="3" fill="#ffffff" opacity="0.2"><animate attributeName="opacity" values="0.2;0.5;0.2" dur="3s" repeatCount="indefinite"/></circle>
+    <circle cx="985" y="440" r="4" fill="#ffffff" opacity="0.15"><animate attributeName="opacity" values="0.15;0.45;0.15" dur="2.5s" repeatCount="indefinite"/></circle>
+    <circle cx="1005" y="470" r="3" fill="#ffffff" opacity="0.25"><animate attributeName="opacity" values="0.25;0.55;0.25" dur="3.5s" repeatCount="indefinite"/></circle>
+    <circle cx="960" y="480" r="2" fill="#ffffff" opacity="0.1"><animate attributeName="opacity" values="0.1;0.4;0.1" dur="4s" repeatCount="indefinite"/></circle>
+    <line x1="945" y1="460" x2="985" y2="440" stroke="#ffffff" stroke-width="0.3" opacity="0.15"/>
+    <line x1="985" y1="440" x2="1005" y2="470" stroke="#ffffff" stroke-width="0.3" opacity="0.15"/>
+    <line x1="945" y1="460" x2="960" y2="480" stroke="#ffffff" stroke-width="0.3" opacity="0.1"/>
+  </g>
+
+  <!-- NEURAL_MESH pixel brain logo (top-left) -->
+  <g transform="translate(30,22)">
+    <!-- Pixelated brain shape — 16x16 grid at 2px cells -->
+    <rect x="0"  y="4"  width="4" height="16" fill="#ffffff" opacity="0.9"/>
+    <rect x="4"  y="2"  width="8" height="6"  fill="#ffffff" opacity="0.85"/>
+    <rect x="4"  y="8"  width="4" height="4"  fill="#ffffff" opacity="0.7"/>
+    <rect x="8"  y="8"  width="4" height="4"  fill="#ffffff" opacity="0.6"/>
+    <rect x="12" y="2"  width="4" height="6"  fill="#ffffff" opacity="0.85"/>
+    <rect x="16" y="4"  width="4" height="16" fill="#ffffff" opacity="0.9"/>
+    <rect x="14" y="12" width="4" height="4"  fill="#ffffff" opacity="0.8"/>
+    <rect x="20" y="8"  width="2" height="10" fill="#ffffff" opacity="0.5"/>
+    <rect x="22" y="8"  width="2" height="8"  fill="#ffffff" opacity="0.5"/>
+    <!-- Node dots on brain -->
+    <circle cx="6"  cy="6"  r="1.5" fill="#00d4ff" opacity="0.9"/>
+    <circle cx="18" cy="6"  r="1.5" fill="#ff00aa" opacity="0.9"/>
+    <circle cx="12" cy="14" r="1.5" fill="#00ff88" opacity="0.9"/>
+  </g>
+
+  <!-- NEURAL_MESH wordmark next to logo -->
+  <text x="72" y="32" fill="#ffffff" font-family="'Courier New', monospace" font-size="14" font-weight="900" letter-spacing="3">NEURAL_MESH</text>
+  <text x="72" y="46" fill="#0052FF" font-family="monospace" font-size="9" opacity="0.7">VERSIONED AGENT MEMORY · BASE L2</text>
+
+  <!-- URL footer -->
+  <text x="1160" y="612" text-anchor="end" fill="#0052FF" font-family="monospace" font-size="9" opacity="0.5">GITHUB.COM/BASEDNUKEM/NEURAL_MESH</text>
+</svg>

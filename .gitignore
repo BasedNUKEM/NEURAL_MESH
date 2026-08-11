@@ -22,3 +22,6 @@ media/
 # Runtime dream-cycle artifacts
 dream_results/
 dream-consolidation-*.md
+
+# Mesh runtime backups
+mesh.db.bak-*
