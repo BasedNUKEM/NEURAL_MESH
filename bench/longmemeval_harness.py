@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""LongMemEval benchmark harness for NEURAL_MESH.
+
+Evaluates how well the mesh stores and retrieves long-term conversational
+memory. 500 question cases across 6 categories: temporal-reasoning,
+multi-session, knowledge-update, single-session-user, single-session-assistant,
+single-session-preference.
+
+Methodology (honest, as per bench contract):
+  - Load LongMemEval oracle JSON (expects it at data/longmemeval_oracle.json)
+  - Ingest every message of every haystack session into a fresh Mesh as
+    episodic nodes with session/message provenance
+  - For each question, retrieve top-k nodes via the selected retrieval mode
+  - Compute retrieval metrics: contextRecall@k, MRR, answer-coverage
+  - Optionally add LLM judge via an API key (gated)
+
+Quick run (hashed embedder, 500 cases, top_k=5):
+  PYTHONPATH=. python3 bench/longmemeval_harness.py --top_k 5 --limit 20
+
+Full oracle run:
+  PYTHONPATH=. python3 bench/longmemeval_harness.py --top_k 5
+
+With real embedder (needs fastembed):
+  PYTHONPATH=. python3 bench/longmemeval_harness.py --top_k 5 --embedder real
+
+With LLM judge (needs OPENROUTER_API_KEY or OPENAI_API_KEY):
+  PYTHONPATH=. .venv-server/bin/python bench/longmemeval_harness.py --judge --top_k 5 --limit 50
+"""
+
+import argparse
+import json
+import sys
+import time
+import os
+from collections import Counter, defaultdict  # noqa: F401
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PARENT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+sys.path.insert(0, PARENT)
+
+from neural_mesh.core import Mesh, MemoryType  # noqa: E402
+from neural_mesh.embed import embed  # noqa: E402
+
+
+# ─── LM-Eval style metrics ────────────────────────────────────────────────
+
+def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
+    """From SQuAD eval: best score across multiple acceptable answers."""
+    if not ground_truths:
+        return 0.0
+    scores = [metric_fn(prediction, gt) for gt in ground_truths]
+    return max(scores) if scores else 0.0
+
+
+def em_score(prediction, ground_truth):
+    """Exact match (lowercased, stripped)."""
+    return 1.0 if str(prediction).strip().lower() == str(ground_truth).strip().lower() else 0.0
+
+
+def f1_score(prediction, ground_truth):
+    """Token-level F1."""
+    pred_tokens = str(prediction).lower().split()
+    truth_tokens = str(ground_truth).lower().split()
+    common = set(pred_tokens) & set(truth_tokens)
+    if not common:
+        return 0.0
+    precision = len(common) / len(pred_tokens) if pred_tokens else 0.0
+    recall = len(common) / len(truth_tokens) if truth_tokens else 0.0
+    if precision + recall == 0:
+        return 0.0
+    return 2 * precision * recall / (precision + recall)
+
+
+def context_recall(retrieved_contents, gold_answer, k=None):
+    """Fraction of top-k nodes whose content contains the gold answer string.
+    contextRecall@k = |{node_i in top-k: answer in node_i.content}| / k"""
+    if k is None:
+        k = len(retrieved_contents)
+    if k == 0:
+        return 0.0
+    answer_lower = str(gold_answer).strip().lower()
+    hits = sum(1 for c in retrieved_contents[:k]
+               if answer_lower in str(c).lower())
+    return hits / k
+
+
+def mrr(retrieved_contents, gold_answer):
+    """Mean Reciprocal Rank — 1 / first rank where answer appears."""
+    answer_lower = str(gold_answer).strip().lower()
+    for i, content in enumerate(retrieved_contents, start=1):
+        if answer_lower in str(content).lower():
+            return 1.0 / i
+    return 0.0
+
+
+# ─── Dataset loading ──────────────────────────────────────────────────────
+
+def load_longmemeval(path="data/longmemeval_oracle.json"):
+    """Load the LongMemEval oracle dataset (500 cases)."""
+    if not os.path.exists(path):
+        # Try alternate locations
+        alt = os.path.join(os.path.dirname(HERE), "data", "longmemeval_oracle.json")
+        if os.path.exists(alt):
+            path = alt
+        else:
+            raise FileNotFoundError(
+                f"LongMemEval oracle not found at {path}. "
+                "Download: https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned"
+            )
+    with open(path) as f:
+        return json.load(f)
+
+
+# ─── Ingestion ────────────────────────────────────────────────────────────
+
+def ingest_case(mesh, case):
+    """Load all haystack sessions of one LongMemEval case into the mesh.
+
+    Each message becomes an episodic MemoryNode tagged with session_id,
+    message index, and role. This mimics how a real chat assistant would
+    store conversation memory.
+    """
+    node_ids = []
+    for session_idx, session in enumerate(case["haystack_sessions"]):
+        session_id = f"{case['question_id']}_s{session_idx}"
+        for msg_idx, msg in enumerate(session):
+            content = f"[{msg['role']}]: {msg['content']}"
+            node = mesh.add(
+                content=content,
+                type=MemoryType.EPISODIC,
+                provenance="longmemeval",
+                by=f"session-{session_idx}",
+                meta={
+                    "case_id": case["question_id"],
+                    "session_id": session_id,
+                    "msg_index": msg_idx,
+                    "role": msg["role"],
+                    "question_type": case["question_type"],
+                },
+            )
+            node_ids.append(node.id)
+    return node_ids
+
+
+# ─── Retrieval ────────────────────────────────────────────────────────────
+
+def retrieve_for_question(mesh, question, top_k=5, mode="dense"):
+    """Retrieve top-k nodes for a question using the mesh's recall."""
+    results = mesh.recall(question, top_k=top_k)
+    if mode == "dense":
+        results = mesh.dense_recall(question, top_k=top_k)
+    elif mode == "lexical":
+        results = mesh.lexical_recall(question, top_k=top_k)
+    elif mode == "hybrid":
+        results = mesh.hybrid_recall(question, top_k=top_k)
+    elif mode == "resonance":
+        results = mesh.recall(question, top_k=top_k)
+    return [r.content for r in results]
+
+
+# ─── LLM Judge (optional — gated on API key) ─────────────────────────────
+
+def judge_answer(query, context_chunks, gold_answer, api_key=None):
+    """Ask an LLM to answer based on retrieved context, then score vs gold."""
+    if not api_key:
+        api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return {"answer": "", "em": 0.0, "f1": 0.0, "note": "no API key"}
+
+    import urllib.request
+    ctx_text = "\n\n".join(c[:500] for c in context_chunks[:5])
+    prompt = (
+        f"Based on the following conversation history, answer the question.\n\n"
+        f"CONVERSATION:\n{ctx_text}\n\n"
+        f"QUESTION: {query}\n\n"
+        f"Answer concisely in 1-2 sentences."
+    )
+
+    # Try OpenRouter first
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model": os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324"),
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 100,
+        "temperature": 0,
+    }
+
+    try:
+        req = urllib.request.Request(url, json.dumps(body).encode(), headers)
+        resp = urllib.request.urlopen(req, timeout=30)
+        result = json.loads(resp.read())
+        answer = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except Exception as e:
+        answer = f"[judge error: {e}]"
+
+    # Score
+    golds = [gold_answer]  # could include aliases
+    return {
+        "answer": answer.strip() if answer else "",
+        "em": metric_max_over_ground_truths(em_score, answer, golds),
+        "f1": metric_max_over_ground_truths(f1_score, answer, golds),
+    }
+
+
+# ─── Main benchmark ───────────────────────────────────────────────────────
+
+def run_benchmark(cases, top_k=5, mode="dense", judge=False, limit=None,
+                  embedder="hashed", validator=False):
+    """Run LongMemEval benchmark and return per-category + overall metrics."""
+    if limit:
+        cases = cases[:limit]
+
+    results = []
+    start_time = time.time()
+
+    for idx, case in enumerate(cases):
+        case_start = time.time()
+
+        # Fresh mesh per case (LongMemEval cases are independent)
+        mesh = Mesh(":memory:", embedder=embed if embedder == "hashed" else None,
+                     validator=validator)
+        node_ids = ingest_case(mesh, case)
+
+        # Retrieve
+        context_chunks = retrieve_for_question(
+            mesh, case["question"], top_k=top_k, mode=mode
+        )
+
+        # Retrieval metrics
+        ctx_recall_1 = context_recall(context_chunks, case["answer"], k=1)
+        ctx_recall_k = context_recall(context_chunks, case["answer"], k=top_k)
+        case_mrr = mrr(context_chunks, case["answer"])
+
+        # LLM judge
+        judge_result = {}
+        if judge:
+            judge_result = judge_answer(
+                case["question"], context_chunks, case["answer"]
+            )
+
+        case_elapsed = time.time() - case_start
+
+        result = {
+            "question_id": case["question_id"],
+            "question_type": case["question_type"],
+            "question": case["question"][:200],
+            "gold_answer": str(case["answer"]),
+            "nodes_ingested": len(node_ids),
+            "context_recall@1": ctx_recall_1,
+            f"context_recall@{top_k}": ctx_recall_k,
+            "mrr": case_mrr,
+            "retrieved": [c[:120] for c in context_chunks[:3]],
+            "elapsed": round(case_elapsed, 2),
+        }
+        if judge:
+            result["judge"] = judge_result
+        results.append(result)
+
+        if (idx + 1) % 10 == 0 or idx == len(cases) - 1:
+            elapsed = time.time() - start_time
+            rate = (idx + 1) / elapsed if elapsed > 0 else 0
+            print(f"  [{idx+1}/{len(cases)}] {rate:.2f} cases/s  "
+                  f"avg {elapsed/(idx+1):.2f}s/case")
+
+    # Aggregate per category
+    by_type = defaultdict(list)
+    for r in results:
+        by_type[r["question_type"]].append(r)
+
+    per_category = {}
+    for qtype, items in sorted(by_type.items()):
+        per_category[qtype] = {
+            "count": len(items),
+            "context_recall@1": sum(it["context_recall@1"] for it in items) / len(items),
+            f"context_recall@{top_k}": sum(it[f"context_recall@{top_k}"] for it in items) / len(items),
+            "mrr": sum(it["mrr"] for it in items) / len(items),
+        }
+        if judge:
+            valid = [it for it in items if it.get("judge", {}).get("answer")]
+            if valid:
+                per_category[qtype]["judge_em"] = (
+                    sum(it["judge"]["em"] for it in valid) / len(valid)
+                )
+                per_category[qtype]["judge_f1"] = (
+                    sum(it["judge"]["f1"] for it in valid) / len(valid)
+                )
+
+    overall = {
+        "cases": len(results),
+        "mode": mode,
+        "top_k": top_k,
+        "embedder": embedder,
+        "context_recall@1": sum(r["context_recall@1"] for r in results) / len(results),
+        f"context_recall@{top_k}": sum(r[f"context_recall@{top_k}"] for r in results) / len(results),
+        "mrr": sum(r["mrr"] for r in results) / len(results),
+        "wall_time": round(time.time() - start_time, 1),
+    }
+    if judge:
+        valid = [r for r in results if r.get("judge", {}).get("answer")]
+        if valid:
+            overall["judge_em"] = sum(r["judge"]["em"] for r in valid) / len(valid)
+            overall["judge_f1"] = sum(r["judge"]["f1"] for r in valid) / len(valid)
+
+    return {"per_category": per_category, "overall": overall, "results": results}
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="LongMemEval benchmark for NEURAL_MESH"
+    )
+    parser.add_argument("--top_k", type=int, default=5, help="Top-k retrieval (default 5)")
+    parser.add_argument("--mode", default="dense",
+                        choices=["dense", "lexical", "hybrid", "resonance"],
+                        help="Retrieval mode (default: dense)")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Cap cases (default: all 500)")
+    parser.add_argument("--judge", action="store_true",
+                        help="Enable LLM judge (needs OPENROUTER_API_KEY)")
+    parser.add_argument("--embedder", default="hashed",
+                        choices=["hashed", "real"],
+                        help="Embedder: hashed (stdlib) or real (fastembed)")
+    parser.add_argument("--dataset", default="data/longmemeval_oracle.json",
+                        help="Path to LongMemEval oracle JSON")
+    parser.add_argument("--output", default=None,
+                        help="Save results to JSON (default: print only)")
+    parser.add_argument("--validator", action="store_true", default=False,
+                        help="Enable ContentValidator (off by default for speed)")
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("LongMemEval — NEURAL_MESH Memory Benchmark")
+    print(f"  mode={args.mode}  top_k={args.top_k}  embedder={args.embedder}"
+          f"  limit={args.limit or 'all'}  judge={args.judge}")
+    print("=" * 60)
+
+    # Load dataset
+    cases = load_longmemeval(args.dataset)
+    print(f"\nLoaded {len(cases)} cases")
+    from collections import Counter
+    types = Counter(c["question_type"] for c in cases)
+    for t, n in types.most_common():
+        print(f"  {t}: {n}")
+
+    # Real embedder
+    if args.embedder == "real":
+        try:
+            from neural_mesh.embed_real import RealEmbedder  # noqa: F811
+            embedder = RealEmbedder()
+            print("\nUsing fastembed (bge-small-en-v1.5)")
+        except ImportError:
+            print("\nfastembed not installed — falling back to hashed")
+            embedder = embed
+            args.embedder = "hashed"
+    else:
+        embedder = embed
+
+    # Run
+    print(f"\nRunning benchmark ({args.limit or 500} cases)...\n")
+    report = run_benchmark(
+        cases, top_k=args.top_k, mode=args.mode,
+        judge=args.judge, limit=args.limit,
+        embedder=args.embedder if args.embedder == "hashed" else None,
+        validator=args.validator,
+    )
+
+    # Print report
+    print(f"\n{'─' * 60}")
+    print("PER-CATEGORY RESULTS")
+    print(f"{'─' * 60}")
+    for qtype, metrics in report["per_category"].items():
+        print(f"\n  {qtype} ({metrics['count']} cases):")
+        print(f"    contextRecall@1:  {metrics['context_recall@1']:.4f}")
+        print(f"    contextRecall@{args.top_k}: {metrics[f'context_recall@{args.top_k}']:.4f}")
+        print(f"    MRR:              {metrics['mrr']:.4f}")
+        if args.judge and "judge_em" in metrics:
+            print(f"    Judge EM:         {metrics['judge_em']:.4f}")
+            print(f"    Judge F1:         {metrics['judge_f1']:.4f}")
+
+    ov = report["overall"]
+    print(f"\n{'═' * 60}")
+    print("OVERALL")
+    print(f"{'═' * 60}")
+    print(f"  Cases:             {ov['cases']}")
+    print(f"  Retrieval mode:    {ov['mode']}")
+    print(f"  Top-k:             {ov['top_k']}")
+    print(f"  Embedder:          {ov['embedder']}")
+    print(f"  contextRecall@1:   {ov['context_recall@1']:.4f}")
+    print(f"  contextRecall@{args.top_k}:  {ov[f'context_recall@{args.top_k}']:.4f}")
+    print(f"  MRR:               {ov['mrr']:.4f}")
+    if args.judge and "judge_em" in ov:
+        print(f"  Judge EM:          {ov['judge_em']:.4f}")
+        print(f"  Judge F1:          {ov['judge_f1']:.4f}")
+    print(f"  Wall time:         {ov['wall_time']:.1f}s")
+    print(f"\n  NOTE: contextRecall is a LEXICAL substring check — it measures")
+    print(f"  whether the gold answer string appears in retrieved nodes.")
+    print(f"  This advantages the hashed (bag-of-words) embedder and is an")
+    print(f"  ARTIFACT, not a quality measure. The defensible NEURAL_MESH")
+    print(f"  advantage is versioning + cross-agent corroboration, both of")
+    print(f"  which LongMemEval was not designed to test.")
+    print(f"  For honest semantic quality, run with --judge (LLM-graded).")
+
+    # Save if requested
+    if args.output:
+        with open(args.output, "w") as f:
+            json.dump(report, f, indent=2, default=str)
+        print(f"\nSaved results to {args.output}")
+
+
+if __name__ == "__main__":
+    main()
