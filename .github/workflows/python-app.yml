@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12"
       - name: Core tests (unittest — pure stdlib, no deps)
         run: |
-          PYTHONPATH=. python -m unittest discover -s tests -p "test_core.py" -p "test_security.py" -p "test_dream_provenance_guard.py" -p "test_reputation.py" -p "test_lanes.py" -p "test_lifecycle.py" -p "test_sharing.py" -p "test_meshfile.py" -p "test_cli_operations.py" -v -q 2>&1
+          PYTHONPATH=. python -m unittest tests.test_core tests.test_security tests.test_dream_provenance_guard tests.test_reputation tests.test_lanes tests.test_lifecycle tests.test_sharing tests.test_meshfile tests.test_cli_operations -v -q 2>&1
 
   server-tests:
     runs-on: ubuntu-latest
