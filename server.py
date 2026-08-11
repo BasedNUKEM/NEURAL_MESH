@@ -578,6 +578,7 @@ def mesh_stats():
     cur = mesh.db.execute("SELECT meta FROM nodes")
     all_meta = [json.loads(r["meta"]) if r["meta"] else {} for r in cur.fetchall()]
     active = len([m for m in all_meta if not m.get("superseded_by")])
+    quarantined = len([m for m in all_meta if m.get("lane") == "quarantine"])
 
     prov_counts = {}
     for m in all_meta:
@@ -592,6 +593,7 @@ def mesh_stats():
         "total_nodes": total,
         "active_nodes": active,
         "consolidated": total - active,
+        "quarantined": quarantined,
         "version": "0.27.0",
         "provenance_breakdown": provenance_breakdown,
     })
