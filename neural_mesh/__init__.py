@@ -20,6 +20,10 @@ from .meshfile import export_mesh, import_mesh
 from .sharing import merge_peer_mesh, consensus_rank, PeerPolicy, export_for_peer
 from .lora_dataset import write_jsonl, write_hf_jsonl, write_weights, summarize
 from .dream import dream, recall_associative
+from .prospective import (
+    upcoming, due_rank, snooze, expired,
+)
+from .budget import select_fit, token_estimate, default_value_score, fit_summary
 from .reader import Reader, ExtractiveReader, CallableReader
 from .lifecycle import MemoryLifecycle
 from .pointer import PointerStore, store_big_output
