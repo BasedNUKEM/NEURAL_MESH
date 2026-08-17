@@ -329,9 +329,59 @@ On a clean 27-fact synthetic set with dense embeddings, flat cosine already
 hits ~100% recall@5, and MESH matches it. **We report this as a tie** — dense
 embeddings are genuinely good at single-fact recall, and pretending otherwise
 would be dishonest. The mesh's edge is *precision under conflict* (above) and
-*subgraph completeness* under context budgets (next on the roadmap).
+*subgraph completeness* under context budgets (measured below).
 
 > Reproduce: `PYTHONPATH=. .venv/bin/python bench/locomo_hard.py`
+
+### Subgraph completeness under context budgets ✅
+
+Flat retrieval scores *content* overlap; it can't tell you whether the mesh is
+surfacing a node's **connected neighborhood**. This benchmark measures exactly
+that: for a seed node with a known set of linked neighbors (the ground-truth
+subgraph), what fraction of those neighbors appear in a top-k recall — and how
+densely the retrieved set re-forms the original graph?
+
+Three numbers per budget `k`:
+- **subgraph_recall@k** — `|retrieved ∩ linked| / |linked|`: did we get the neighbors?
+- **edge_density@k** — edges within the retrieved set / max possible: did we get them *connected*?
+- **topology_score** — harmonic mean of the two, a single 0–1 "does retrieval preserve the graph" signal.
+
+Live mesh (prod snapshot 2026-08-14: 580 rows / 173 live nodes, hashed embedder, Rust resonance backend):
+
+```text
+budget k | subgraph_recall | edge_density | topology_score
+     5   |      0.120      |     0.874    |     0.169
+    10   |      0.199      |     0.809    |     0.239
+    20   |      0.273      |     0.740    |     0.293
+    50   |      0.431      |     0.708    |     0.428
+```
+
+Synthetic uniform-link baseline (500 nodes, 10 clusters, same harness, seed 42):
+
+```text
+budget k | subgraph_recall | edge_density | topology_score
+     5   |      0.015      |     1.000    |     0.029
+    10   |      0.033      |     1.000    |     0.064
+    20   |      0.070      |     0.998    |     0.131
+    50   |      0.180      |     0.965    |     0.303
+```
+
+**Honest findings:** the real mesh surfaces a seed node's *linked* neighborhood
+**~4× better** than a uniform random graph at k=20 (recall 0.273 vs 0.070) and
+~2.4× at k=50 — because autolink builds semantically-connected clusters, not
+random edges. Edge density falls as the budget grows (retrieving more nodes
+dilutes clustering), which is expected; topology_score rises steadily because
+subgraph recall grows faster than density thins. The synthetic baseline's
+near-perfect edge density is itself an artifact — hashed bag-of-words autolink
+forms one dense blob, so *any* retrieved set looks connected. Real-embedder
+(fastembed) runs should widen the recall gap further (semantic neighbors rank
+above lexical collisions); that is **unmeasured** until the LLM-judge and
+real-embedder goals are funded.
+
+> Reproduce (synthetic, deterministic):
+> `PYTHONPATH=. python3 bench/subgraph_completeness.py --nodes 500 --budgets 5,10,20,50 --limit 100`
+> Reproduce (live mesh — requires the prod `mesh.db`):
+> `PYTHONPATH=. python3 bench/subgraph_completeness.py --db mesh.db --budgets 5,10,20,50 --limit 50`
 
 ### Real LoCoMo retrieval grounding (full locomo10)
 
@@ -570,6 +620,41 @@ externally-supplied signature / verification result (e.g. the D0xedDev
 
 **Live deployment (D0xedDev VPS):** 198 nodes · DREAM cron every 12h with template muse · `resonance_backend: rust` · benchmarks re-verified.
 
+### Prospective memory — the "memory of the future" 🆕
+
+Real cognitive type (episodic future thinking / intentions) that almost no
+shipped memory engine handles: they store the PAST. `Mesh.add(..., prospective_at=ts)`
+writes an intention; this module surfaces it **before** it's due.
+
+```python
+from neural_mesh import upcoming, due_rank, snooze, expired
+now = time.time()
+mesh.add("Follow up with Maya about Acme", type=MemoryType.PROSPECTIVE,
+         prospective_at=now + 300, trust=0.9)
+due = upcoming(mesh, now=now, horizon_sec=3600)   # -> the follow-up
+ranked = due_rank(mesh, now=now, k=5)             # proximity × trust
+snooze(mesh, node.id, now + 86400)                # push it out
+```
+
+### Working-memory token-budget optimizer 🆕
+
+Most systems treat working memory as a *retrieval* problem. This treats it as a
+**budget** problem: a fixed context cap, with priority eviction.
+
+```python
+from neural_mesh import select_fit, fit_summary
+kept, evicted = select_fit(nodes, budget=60)   # highest-value fit
+fit_summary(kept, evicted)                     # kept/evicted counts + tokens
+```
+
+Eviction is **non-destructive** — dropped memories stay in the mesh as cold
+memory, just out of the active window. This is the missing half of a working-
+memory lane.
+
+> Reproduce all six lanes: `PYTHONPATH=. python3 bench/five_lane_demo.py` →
+> `runtime/five_lane_evidence.json` → `bench/render_five_lane_figure.py` →
+> `docs/assets/five_lane_evidence.png`.
+
 ---
 
 ## 🏗️ Architecture
@@ -621,6 +706,9 @@ externally-supplied signature / verification result (e.g. the D0xedDev
 - [x] LoCoMo QA evaluation — LLM judge scores mesh answers against ground truth with `/eval/qa`
 - [ ] End-to-end LoCoMo QA (feed retrieved context to an LLM judge)  ← LLMReader enables this
 - [x] Rust hot path for large meshes — exact-parity query scoring + weighted activation spread
+- [x] Subgraph-completeness benchmark under context budgets — topology_score (subgraph_recall × edge_density)
+- [x] **Prospective memory lane** — the "memory of the future": intentions surface before due (`upcoming`/`due_rank`), re-future via `snooze`, expired tracking
+- [x] **Working-memory token-budget optimizer** — context as a budget problem: greedy value-density fit, non-destructive priority eviction (`select_fit`)
 - [ ] Live Helixa signing (on-chain attestation) — gated behind human GO + key-held signer
 
 ---
