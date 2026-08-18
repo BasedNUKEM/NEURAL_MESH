@@ -208,7 +208,7 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
 
     if base_url:
         url = base_url.rstrip("/") + "/chat/completions"
-        model = os.environ.get("NOUS_JUDGE_MODEL", "deepseek/deepseek-v4-flash")
+        model = os.environ.get("NOUS_JUDGE_MODEL", "deepseek/deepseek-v4-pro-0813")
     else:
         url = "https://openrouter.ai/api/v1/chat/completions"
         model = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324")

@@ -171,19 +171,22 @@ NFT, distinct from the agent — both now on-chain and wired into the manifest.
 ## Goal 5 — LongMemEval: real embedder + judge (honest re-score)
 
 **Status: 🟦 REAL-EMBEDDER + JUDGE DONE (2026-08-18)** — dense re-score (real
-bge-small) AND first LLM-judge run complete. See honest coverage caveat below.
+bge-small) AND two LLM-judge runs complete. See honest coverage caveat below.
 
-**LLM judge run (2026-08-18, bge-small real embedder + deepseek-v4-flash via
-Hermes/Nous httpx path, dense, top_k=5, 100 cases, wall 10779.7s):**
-- **Judge F1: 0.1686** (EM: 0.000 — LongMemEval golds are verbose; EM is exact-substring, F1 is the honest read)
-- Per-category: temporal-reasoning F1=0.225 (60 cases); multi-session F1=0.068 (40 cases)
-- **HONEST COVERAGE CAVEAT:** the Nous-routed model returned *empty content*
-  (no error, HTTP 200) on 61/100 cases — intermittently, worsening as the run
-  wore on. The harness aggregates judge F1 over **answer-present cases only**,
-  so **0.1686 is computed over the 39 answered cases**, not all 100. All 39
-  answers verified real + correct (extracted GPS/webinar/bike/Galaxy S22 from
-  context). **Fix shipped:** judge now retries empty responses up to 3× with
-  backoff — a re-run should recover most of the missing coverage.
+**LLM judge run #1 (2026-08-18, deepseek-v4-flash, 100 cases, wall 10779.7s):**
+- Judge F1 0.1686 over 39/100 answered (61 empty) — partial.
+
+**LLM judge run #2 (2026-08-18, deepseek-v4-flash + 3× retry-on-empty, wall 6450.7s):**
+- **Answered-only F1: 0.1541** (52/100 answered — retry recovered 13 cases)
+- **Full-100 F1 (empties = 0): 0.0801** ← the honest, defensible number
+- Per-category: temporal-reasoning 32/60 (F1 0.230); multi-session 20/40 (F1 0.033)
+- **HONEST COVERAGE CAVEAT:** still 48/100 empty. Root cause = `deepseek-v4-flash`
+  intermittently returns empty content (no error, HTTP 200) even with 3 retries.
+  The harness aggregates judge F1 over **answer-present cases only**, so the
+  0.1541 headline is NOT over all 100 — the full-100 number (empties=0) is 0.0801.
+- **Fix applied:** harness default judge model bumped to
+  `deepseek/deepseek-v4-pro-0813` (more reliable structured output). A re-run
+  with that model should collapse the 48 empties and yield a full-coverage F1.
 
 **Outcome:** replace the artifact numbers (bag-of-words substring check) with a
 real `bge-small` embedder + `--judge` run so the LongMemEval row in the README
@@ -221,8 +224,9 @@ defaults to hashed when None.
 🟦 Real-embedder numbers published alongside the hashed baseline.
 🟦 README states plainly which is which.
 🟦 Numbers come from an actual bge-small run (verified embedder= in output).
-🟦 Judge run (Hermes/Nous LLM path) for semantic EM/F1 — DONE (F1=0.1686 over
-39 answered cases; empty-content coverage fix shipped for full re-run).
+🟦 Judge run (Hermes/Nous LLM path) for semantic EM/F1 — DONE (two runs; final
+honest number = full-100 F1 0.0801, answered-only 0.1541 over 52/100; default
+model fixed to v4-pro-0813 for a full-coverage re-run).
 
 ---
 
