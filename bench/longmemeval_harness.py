@@ -223,15 +223,24 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
         "temperature": 0,
     }
 
-    try:
-        with httpx.Client(timeout=45,
-                          headers={"Authorization": f"Bearer {api_key}",
-                                   "Content-Type": "application/json"}) as client:
-            resp = client.post(url, json=body)
-            result = resp.json()
-        answer = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    except Exception as e:
-        answer = f"[judge error: {e}]"
+    # The Nous-routed model intermittently returns empty content (no error).
+    # Retry up to 3x before giving up — empty drops the case from judge stats.
+    answer = ""
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=45,
+                              headers={"Authorization": f"Bearer {api_key}",
+                                       "Content-Type": "application/json"}) as client:
+                resp = client.post(url, json=body)
+                result = resp.json()
+            candidate = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if candidate and candidate.strip():
+                answer = candidate
+                break
+            time.sleep(2 * (attempt + 1))  # backoff then retry empty
+        except Exception as e:
+            answer = f"[judge error: {e}]"
+            break
 
     # Score
     golds = [gold_answer]  # could include aliases

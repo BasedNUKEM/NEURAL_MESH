@@ -159,8 +159,20 @@ is only the *policy + broadcast* step.
 
 ## Goal 5 — LongMemEval: real embedder + judge (honest re-score)
 
-**Status: 🟦 DENSE RE-SCORE DONE (2026-08-18)** — real bge-small numbers published
-below; `--judge` (LLM semantic scoring) pending next.
+**Status: 🟦 REAL-EMBEDDER + JUDGE DONE (2026-08-18)** — dense re-score (real
+bge-small) AND first LLM-judge run complete. See honest coverage caveat below.
+
+**LLM judge run (2026-08-18, bge-small real embedder + deepseek-v4-flash via
+Hermes/Nous httpx path, dense, top_k=5, 100 cases, wall 10779.7s):**
+- **Judge F1: 0.1686** (EM: 0.000 — LongMemEval golds are verbose; EM is exact-substring, F1 is the honest read)
+- Per-category: temporal-reasoning F1=0.225 (60 cases); multi-session F1=0.068 (40 cases)
+- **HONEST COVERAGE CAVEAT:** the Nous-routed model returned *empty content*
+  (no error, HTTP 200) on 61/100 cases — intermittently, worsening as the run
+  wore on. The harness aggregates judge F1 over **answer-present cases only**,
+  so **0.1686 is computed over the 39 answered cases**, not all 100. All 39
+  answers verified real + correct (extracted GPS/webinar/bike/Galaxy S22 from
+  context). **Fix shipped:** judge now retries empty responses up to 3× with
+  backoff — a re-run should recover most of the missing coverage.
 
 **Outcome:** replace the artifact numbers (bag-of-words substring check) with a
 real `bge-small` embedder + `--judge` run so the LongMemEval row in the README
@@ -198,7 +210,8 @@ defaults to hashed when None.
 🟦 Real-embedder numbers published alongside the hashed baseline.
 🟦 README states plainly which is which.
 🟦 Numbers come from an actual bge-small run (verified embedder= in output).
-🟦 Judge run (Hermes/Nous LLM path) for semantic EM/F1.
+🟦 Judge run (Hermes/Nous LLM path) for semantic EM/F1 — DONE (F1=0.1686 over
+39 answered cases; empty-content coverage fix shipped for full re-run).
 
 ---
 
