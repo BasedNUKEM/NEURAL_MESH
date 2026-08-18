@@ -39,6 +39,7 @@ from .helixa_attest import (
     build_attestation_message,
     sign_attestation,
     record_onchain_attestation,
+    attest_node,
     AttestationMessage,
 )
 
@@ -48,6 +49,13 @@ ENV_FILE = "/opt/data/.env.d0xeddev_populated"
 AGENT_WALLET_FILE = "/opt/data/D0XEDDEV/.agent_fresh_wallet.json"
 HELIXA_API_BASE = "https://helixa.xyz/api/v2"
 HELIXA_AGENT_ID = "5287"  # canonical D0xed Dev agent
+
+# ERC-8004 IdentityRegistry — used as the on-chain attestation target.
+# The registry is MINIMAL: register(string dataURI) returns uint256, emits
+# Registered(uint256 indexed agentId, string dataURI, address indexed owner).
+ERC8004_REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+ERC8004_CHAIN_ID = 8453  # Base Mainnet
+ERC8004_RPC = "https://mainnet.base.org"
 
 
 # ── key loading (private — never exposed) ──────────────────────────────
@@ -274,6 +282,68 @@ class HelixaSigner:
         except urllib.error.HTTPError as e:
             return {"error": str(e), "detail": e.read().decode(errors="replace")[:300]}
 
+    def _broadcast_attestation(self, signature: str, message_json: str) -> str:
+        """Broadcast an attestation to the ERC-8004 registry on Base.
+
+        Encodes the signed attestation as a base64 ``data:`` URI and calls
+        ``IdentityRegistry.register(dataURI)``, returning the tx hash.
+
+        This is the REAL on-chain broadcast path (vs the historical local-only
+        signing). Requires web3 + a funded wallet (>~0.0003 ETH). Raises on
+        missing deps or insufficient balance so callers fail loudly rather than
+        silently recording an empty tx_hash.
+        """
+        try:
+            from web3 import Web3
+        except ImportError:
+            raise RuntimeError(
+                "web3 not installed — install web3 to enable on-chain attestation"
+            )
+
+        # Minimal registry ABI (verified 2026-08-18 — NO totalSupply/tokenURI)
+        abi = [{
+            "inputs": [{"internalType": "string", "name": "agentURI", "type": "string"}],
+            "name": "register",
+            "outputs": [{"internalType": "uint256", "name": "agentId", "type": "uint256"}],
+            "stateMutability": "nonpayable",
+            "type": "function",
+        }]
+        w3 = Web3(Web3.HTTPProvider(ERC8004_RPC))
+        if not w3.is_connected():
+            raise RuntimeError(f"Cannot connect to Base RPC: {ERC8004_RPC}")
+
+        # Encode attestation as a base64 data URI (per ERC-8004 crossreg flow)
+        import base64
+        payload_b64 = base64.b64encode(message_json.encode()).decode()
+        data_uri = f"data:application/json;base64,{payload_b64}"
+
+        contract = w3.eth.contract(
+            address=Web3.to_checksum_address(ERC8004_REGISTRY), abi=abi
+        )
+        addr = Web3.to_checksum_address(self.address)
+        balance = w3.eth.get_balance(addr)
+        if balance < w3.to_wei(0.0003, "ether"):
+            raise RuntimeError(
+                f"Insufficient ETH for attestation broadcast: {w3.from_wei(balance, 'ether')} ETH "
+                f"(need ≥0.0003). Fund {self.address} first."
+            )
+
+        if self.degraded or self._account is None:
+            raise RuntimeError(
+                "Cannot broadcast — no signer account (eth-account not installed)."
+            )
+
+        nonce = w3.eth.get_transaction_count(addr)
+        tx = contract.functions.register(data_uri).build_transaction({
+            "from": addr,
+            "nonce": nonce,
+            "gas": 300000,
+            "gasPrice": w3.eth.gas_price,
+        })
+        signed = self._account.sign_transaction(tx)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        return tx_hash.hex()
+
     # ── attestation integration ─────────────────────────────────────
 
     def attest_mesh_node(
@@ -283,10 +353,13 @@ class HelixaSigner:
         *,
         dry_run: bool = True,
         aura_score: float = 0.0,
+        broadcast: bool = False,
     ) -> dict[str, Any]:
         """Full Helixa attestation flow: sign locally → record in mesh.
 
-        Optionally verifies on-chain (if ``dry_run=False``).
+        Optional on-chain broadcast (``broadcast=True``) publishes the signed
+        attestation to the ERC-8004 registry on Base and records the real
+        ``tx_hash``. Default (broadcast=False) signs + records locally only.
         NEVER exposes the private key.
         """
         agent_id = HELIXA_AGENT_ID
@@ -305,8 +378,11 @@ class HelixaSigner:
                 "agent_id": agent_id,
                 "address": self.address,
                 "message_hash": message.signing_hash(),
+                "broadcast": broadcast,
                 "action": "attest_mesh_node",
                 "note": "Set dry_run=False to sign and record the attestation."
+                        + (f" broadcast={broadcast} → also publishes on-chain."
+                           if broadcast else "")
                         + (" Install 'eth-account' first." if self.degraded else ""),
             }
 
@@ -334,14 +410,19 @@ class HelixaSigner:
             signed = self._account.sign_message(msg)
             return "0x" + signed.signature.hex()
 
-        signature = sign_attestation(message, eth_sign)
+        # Wire the real ERC-8004 broadcast (optional). When broadcast=False the
+        # attestation is signed + recorded locally with an empty tx_hash.
+        broadcast_fn = self._broadcast_attestation if broadcast else None
 
-        result = record_onchain_attestation(
-            mesh, node_id, signature,
-            agent_id=agent_id, aura_score=aura_score,
+        result = attest_node(
+            mesh, node_id, agent_id,
+            sign_fn=eth_sign,
+            broadcast_fn=broadcast_fn,
+            aura_score=aura_score,
         )
         result["message_hash"] = message.signing_hash()
         result["address"] = self.address
+        result["broadcast"] = broadcast
         return result
 
 

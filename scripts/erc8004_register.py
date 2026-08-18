@@ -42,6 +42,13 @@ DEFAULT_MANIFEST_URL = "https://api.d0xeddev.com/mesh/erc8004/manifest"
 
 # ERC-8004 IdentityRegistry ABI — register(string agentURI) returns uint256
 # From: https://eips.ethereum.org/EIPS/eip-8004
+#
+# NOTE (2026-08-18, verified live): this registry is MINIMAL. It exposes
+# `register(string)` and emits `Registered(uint256 indexed agentId, string dataURI,
+# address indexed owner)`. It does NOT implement the full ERC-721 enumeration
+# surface (totalSupply / tokenURI / tokenOfOwnerByIndex revert with "no data").
+# The agentId is the INDEXED topic[1] of the Registered event, NOT a Transfer
+# event's topic[3].
 REGISTRY_ABI = [
     {
         "inputs": [{"internalType": "string", "name": "agentURI", "type": "string"}],
@@ -51,16 +58,19 @@ REGISTRY_ABI = [
         "type": "function",
     },
     {
-        "inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}],
-        "name": "tokenURI",
-        "outputs": [{"internalType": "string", "name": "", "type": "string"}],
-        "stateMutability": "view",
-        "type": "function",
+        "anonymous": False,
+        "inputs": [
+            {"indexed": True, "internalType": "uint256", "name": "agentId", "type": "uint256"},
+            {"indexed": False, "internalType": "string", "name": "dataURI", "type": "string"},
+            {"indexed": True, "internalType": "address", "name": "owner", "type": "address"},
+        ],
+        "name": "Registered",
+        "type": "event",
     },
     {
-        "inputs": [],
-        "name": "totalSupply",
-        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}],
+        "name": "ownerOf",
+        "outputs": [{"internalType": "address", "name": "", "type": "address"}],
         "stateMutability": "view",
         "type": "function",
     },
@@ -135,14 +145,22 @@ def register(account, manifest_url: str, gas_limit: int = 300000):
     if receipt.status != 1:
         raise RuntimeError(f"Transaction reverted! hash={tx_hash.hex()}")
 
-    # Decode the return value
+    # Decode the agentId from the Registered event (indexed topic[1]).
+    # The registry returns the agentId directly from register(), but reading
+    # the receipt event is the robust path (matches the crossreg flow).
     try:
-        log_entry = contract.events.Transfer().process_receipt(receipt)
-        if log_entry:
-            token_id = log_entry[0]["args"]["tokenId"]
-        else:
-            # Fallback: parse from receipt logs (topic-3 of Transfer event)
-            token_id = int(receipt.logs[0].topics[3].hex(), 16)
+        agent_id = None
+        registered = contract.events.Registered().process_receipt(receipt)
+        if registered:
+            agent_id = registered[0]["args"]["agentId"]
+        if agent_id is None:
+            # Fallback: Registered(uint256 indexed, string, address indexed)
+            #   topic0 = sig, topic1 = agentId, topic2 = owner
+            for lg in receipt.logs:
+                if len(lg.topics) >= 2:
+                    agent_id = int(lg.topics[1].hex(), 16)
+                    break
+        token_id = agent_id
     except Exception:
         token_id = "unknown"
     return token_id, tx_hash.hex(), receipt.gasUsed
@@ -195,17 +213,16 @@ def main():
         print(f"   Fund the wallet first, then rerun with --execute.")
         sys.exit(1)
 
-    # 4. Registration contract status
+    # 4. Registration contract status (minimal registry — no totalSupply)
     print(f"\n📊 CONTRACT STATUS")
     contract = w3.eth.contract(
         address=Web3.to_checksum_address(IDENTITY_REGISTRY),
         abi=REGISTRY_ABI,
     )
-    try:
-        total = contract.functions.totalSupply().call()
-        print(f"   Total agents registered: {total}")
-    except Exception as e:
-        print(f"   totalSupply() call failed: {e}")
+    # Optionally detect whether this wallet already has a registration by
+    # scanning Registered events (rate-limited RPC — keep it cheap). Skipped
+    # in dry-run; the register() itself is non-idempotent (each call mints a
+    # NEW agentId), so a prior mint does NOT block a fresh one.
 
     # 5. Execute or dry-run
     if args.execute:

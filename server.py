@@ -1174,9 +1174,11 @@ def yantrikdb_skills_search():
 def helixa_attest_node():
     """Sign a mesh node attestation with the live Helixa agent wallet.
 
-    Body: {node_id, dry_run? default=true, aura_score?}
+    Body: {node_id, dry_run? default=true, aura_score?, broadcast? default=false}
 
     dry_run=false COMMITS a real signature from the agent wallet.
+    broadcast=true (with dry_run=false) ALSO publishes the signed attestation
+    to the ERC-8004 registry on Base, recording the real tx_hash.
     The private key is NEVER returned — only the signature + tx hash.
     """
     data = request.get_json() or {}
@@ -1186,11 +1188,15 @@ def helixa_attest_node():
 
     dry_run = data.get("dry_run", True)
     aura_score = float(data.get("aura_score", 0.0))
+    broadcast = bool(data.get("broadcast", False))
 
     from neural_mesh.integrations.helixa_signer import HelixaSigner
     try:
         signer = HelixaSigner()
-        result = signer.attest_mesh_node(mesh, node_id, dry_run=dry_run, aura_score=aura_score)
+        result = signer.attest_mesh_node(
+            mesh, node_id, dry_run=dry_run, aura_score=aura_score,
+            broadcast=broadcast,
+        )
         return jsonify(result)
     except Exception as exc:
         return _json_error(str(exc), 500)
