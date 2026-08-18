@@ -161,14 +161,43 @@ def retrieve_for_question(mesh, question, top_k=5, mode="dense"):
 
 # ─── LLM Judge (optional — gated on API key) ─────────────────────────────
 
+def _nous_credentials():
+    """Resolve Nous inference credentials via Hermes' own runtime resolver.
+
+    Returns (api_key, base_url) or (None, None). This is the proven-working
+    path — the raw inference-api endpoint Cloudflare-blocks urllib (error 1010)
+    but accepts httpx (Hermes' own TLS fingerprint).
+    """
+    try:
+        sys.path.insert(0, "/opt/hermes/.venv/lib/python3.13/site-packages")
+        sys.path.insert(0, "/opt/hermes")
+        from hermes_cli.auth import resolve_nous_runtime_credentials
+        creds = resolve_nous_runtime_credentials(timeout_seconds=20)
+        return creds.get("api_key"), (creds.get("base_url") or
+                                      "https://inference-api.nousresearch.com/v1")
+    except Exception as e:
+        print(f"  [judge] nous cred resolve failed: {e}")
+        return None, None
+
+
 def judge_answer(query, context_chunks, gold_answer, api_key=None):
-    """Ask an LLM to answer based on retrieved context, then score vs gold."""
+    """Ask an LLM to answer based on retrieved context, then score vs gold.
+
+    Routes through the Hermes/Nous Portal inference path (httpx), falling back
+    to OPENROUTER/OPENAI env keys only if present (both are exhausted as of
+    2026-08). urllib is NOT used — Cloudflare 1010-blocks its TLS fingerprint.
+    """
+    import httpx
+
     if not api_key:
         api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    base_url = None
+    if not api_key:
+        # Nous portal path (Hermes resolver)
+        api_key, base_url = _nous_credentials()
     if not api_key:
         return {"answer": "", "em": 0.0, "f1": 0.0, "note": "no API key"}
 
-    import urllib.request
     ctx_text = "\n\n".join(c[:500] for c in context_chunks[:5])
     prompt = (
         f"Based on the following conversation history, answer the question.\n\n"
@@ -177,23 +206,29 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
         f"Answer concisely in 1-2 sentences."
     )
 
-    # Try OpenRouter first
-    url = "https://openrouter.ai/api/v1/chat/completions"
+    if base_url:
+        url = base_url.rstrip("/") + "/chat/completions"
+        model = os.environ.get("NOUS_JUDGE_MODEL", "deepseek/deepseek-v4-flash")
+    else:
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        model = os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324")
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     body = {
-        "model": os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324"),
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 100,
         "temperature": 0,
     }
 
     try:
-        req = urllib.request.Request(url, json.dumps(body).encode(), headers)
-        resp = urllib.request.urlopen(req, timeout=30)
-        result = json.loads(resp.read())
+        with httpx.Client(timeout=45,
+                          headers={"Authorization": f"Bearer {api_key}",
+                                   "Content-Type": "application/json"}) as client:
+            resp = client.post(url, json=body)
+            result = resp.json()
         answer = result.get("choices", [{}])[0].get("message", {}).get("content", "")
     except Exception as e:
         answer = f"[judge error: {e}]"
