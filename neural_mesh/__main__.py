@@ -145,9 +145,11 @@ def cmd_rust_info(args):
         g = rust_mesh.Graph(100)
         g.add_edge(0, 1, 0.9)
         bfs = g.bfs(0, 2)
+        bm25 = callable(getattr(rust_mesh, "bulk_bm25", None))
         print(json.dumps({
             "rust_module": "rust_mesh",
             "functions": [x for x in dir(rust_mesh) if not x.startswith("_")],
+            "bm25_available": bm25,
             "bfs_test": f"{len(bfs)} nodes visited from 100-node graph",
         }, indent=2))
     except ImportError as e:

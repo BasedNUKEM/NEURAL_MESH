@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use std::collections::{BinaryHeap, HashMap, VecDeque};
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
 // ============================================================================
 // Cosine similarity (existing, unchanged)
@@ -174,6 +174,208 @@ fn spread_activation(
         }
     }
     activation
+}
+
+// ============================================================================
+// BM25 full-text scoring
+// ============================================================================
+
+/// Okapi BM25 inverse document frequency with +0.5 smoothing.
+///
+/// `n` is the corpus size, `df` the number of documents containing the term.
+/// This is the standard smoothed idf and must stay identical to the Python
+/// reference in `neural_mesh/bm25.py::_idf` (both use f64 natural log).
+#[pyfunction]
+fn bm25_idf(n: usize, df: usize) -> f64 {
+    (1.0 + (n as f64 - df as f64 + 0.5) / (df as f64 + 0.5)).ln()
+}
+
+/// Shared scoring core: BM25 over a tokenized document + tokenized query.
+///
+/// Sums over DISTINCT query terms present in `doc` (the classic Okapi form
+/// ignores query-side term frequency). `df` maps term -> number of docs in the
+/// corpus containing it. Formula:
+///
+///     idf(t) * f(t,D) * (k1 + 1) / (f(t,D) + k1 * (1 - b + b * |D|/avgdl))
+fn bm25_score_impl(
+    doc: &[String],
+    query: &[String],
+    df: &HashMap<String, usize>,
+    n_docs: usize,
+    avgdl: f64,
+    k1: f64,
+    b: f64,
+) -> f64 {
+    if doc.is_empty() || query.is_empty() {
+        return 0.0;
+    }
+    let mut tf: HashMap<&str, usize> = HashMap::new();
+    for t in doc {
+        *tf.entry(t.as_str()).or_insert(0) += 1;
+    }
+    let doclen = doc.len() as f64;
+    let denom_norm = if avgdl > 0.0 {
+        1.0 - b + b * (doclen / avgdl)
+    } else {
+        1.0
+    };
+    let mut score = 0.0;
+    let mut seen: HashSet<&str> = HashSet::new();
+    for t in query {
+        if !seen.insert(t.as_str()) {
+            continue;
+        }
+        let f = match tf.get(t.as_str()) {
+            Some(&f) => f as f64,
+            None => continue,
+        };
+        let df_t = df.get(t.as_str()).copied().unwrap_or(0);
+        let idf = bm25_idf(n_docs, df_t);
+        score += idf * f * (k1 + 1.0) / (f + k1 * denom_norm);
+    }
+    score
+}
+
+/// Score a single tokenized document against a tokenized query.
+///
+/// `df` is a Python dict of `{term: document_frequency}` across the corpus.
+#[pyfunction]
+fn bm25_score(
+    doc: Vec<String>,
+    query: Vec<String>,
+    df: HashMap<String, usize>,
+    n_docs: usize,
+    avgdl: f64,
+    k1: f64,
+    b: f64,
+) -> f64 {
+    bm25_score_impl(&doc, &query, &df, n_docs, avgdl, k1, b)
+}
+
+/// Score every tokenized document in a corpus against a tokenized query.
+///
+/// `corpus` is a list of token lists (already tokenized by the caller), so no
+/// tokenization cost is hidden inside the hot path. Returns one BM25 score per
+/// document, in corpus order. `df`/`avgdl` are computed from the corpus.
+#[pyfunction]
+fn bulk_bm25(corpus: Vec<Vec<String>>, query: Vec<String>, k1: f64, b: f64) -> Vec<f64> {
+    let n = corpus.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut df: HashMap<String, usize> = HashMap::new();
+    let mut total_len = 0usize;
+    for doc in &corpus {
+        total_len += doc.len();
+        let mut seen: HashSet<&str> = HashSet::new();
+        for t in doc {
+            if seen.insert(t.as_str()) {
+                *df.entry(t.clone()).or_insert(0) += 1;
+            }
+        }
+    }
+    let avgdl = total_len as f64 / n as f64;
+    corpus
+        .iter()
+        .map(|doc| bm25_score_impl(doc, &query, &df, n, avgdl, k1, b))
+        .collect()
+}
+
+/// Persistent BM25 index: the tokenized corpus, per-document term frequencies,
+/// and document frequencies all live in Rust memory across queries, so scoring
+/// pays no PyO3 corpus-conversion and no per-query term-frequency rebuild. The
+/// one-shot `bulk_bm25` only breaks even (the list->Vec conversion dominates);
+/// this is the fast path for a mesh that indexes once and recalls many times.
+#[pyclass]
+struct Bm25Index {
+    doc_tf: Vec<HashMap<String, u32>>,
+    doc_lens: Vec<f64>,
+    df: HashMap<String, usize>,
+    n_docs: usize,
+    avgdl: f64,
+    k1: f64,
+    b: f64,
+}
+
+#[pymethods]
+impl Bm25Index {
+    /// Build an index over a tokenized corpus (list of token lists).
+    #[new]
+    fn new(corpus: Vec<Vec<String>>, k1: f64, b: f64) -> Self {
+        let n = corpus.len();
+        let mut doc_tf: Vec<HashMap<String, u32>> = Vec::with_capacity(n);
+        let mut doc_lens: Vec<f64> = Vec::with_capacity(n);
+        let mut df: HashMap<String, usize> = HashMap::new();
+        let mut total_len = 0usize;
+        for doc in &corpus {
+            let mut tf: HashMap<String, u32> = HashMap::new();
+            for t in doc {
+                *tf.entry(t.clone()).or_insert(0) += 1;
+            }
+            total_len += doc.len();
+            doc_lens.push(doc.len() as f64);
+            for t in tf.keys() {
+                *df.entry(t.clone()).or_insert(0) += 1;
+            }
+            doc_tf.push(tf);
+        }
+        let avgdl = if n > 0 {
+            total_len as f64 / n as f64
+        } else {
+            1.0
+        };
+        Bm25Index {
+            doc_tf,
+            doc_lens,
+            df,
+            n_docs: n,
+            avgdl,
+            k1,
+            b,
+        }
+    }
+
+    /// Score every document against a tokenized query (pure lookups — query
+    /// idf is computed once, then each doc's precomputed tf is consulted).
+    fn score(&self, query: Vec<String>) -> Vec<f64> {
+        // Distinct query terms in first-occurrence order + their idf, once.
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut q_terms: Vec<&str> = Vec::with_capacity(query.len());
+        for t in &query {
+            if seen.insert(t.as_str()) {
+                q_terms.push(t.as_str());
+            }
+        }
+        let mut term_idf: Vec<f64> = Vec::with_capacity(q_terms.len());
+        for &t in &q_terms {
+            let df_t = self.df.get(t).copied().unwrap_or(0);
+            term_idf.push(bm25_idf(self.n_docs, df_t));
+        }
+
+        self.doc_tf
+            .iter()
+            .zip(self.doc_lens.iter())
+            .map(|(tf, &doclen)| {
+                let denom_norm = if self.avgdl > 0.0 {
+                    1.0 - self.b + self.b * (doclen / self.avgdl)
+                } else {
+                    1.0
+                };
+                let mut score = 0.0;
+                for (i, &t) in q_terms.iter().enumerate() {
+                    if let Some(&f) = tf.get(t) {
+                        let f = f as f64;
+                        score += term_idf[i] * f * (self.k1 + 1.0) / (f + self.k1 * denom_norm);
+                    }
+                }
+                score
+            })
+            .collect()
+    }
+
+    fn __len__(&self) -> usize {
+        self.n_docs
+    }
 }
 
 // ============================================================================
@@ -403,6 +605,10 @@ fn rust_mesh(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(query_dot_similarity, m)?)?;
     m.add_function(wrap_pyfunction!(spread_activation, m)?)?;
     m.add_function(wrap_pyfunction!(graph_from_edges, m)?)?;
+    m.add_function(wrap_pyfunction!(bm25_idf, m)?)?;
+    m.add_function(wrap_pyfunction!(bm25_score, m)?)?;
+    m.add_function(wrap_pyfunction!(bulk_bm25, m)?)?;
     m.add_class::<Graph>()?;
+    m.add_class::<Bm25Index>()?;
     Ok(())
 }

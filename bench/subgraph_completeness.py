@@ -144,7 +144,8 @@ def run_live_mesh_bench(db_path: str, budgets: list[int], limit: int = 50):
     """Bench subgraph completeness on a live mesh DB."""
     mesh = Mesh(db_path=db_path)
     stats = mesh.stats()
-    print(f"Live mesh: {stats.get('active_nodes', 0)} active nodes", file=sys.stderr)
+    total = stats.get("total", len(mesh._load()))
+    print(f"Live mesh: {total} nodes", file=sys.stderr)
 
     # Get active nodes with links
     all_ids = [

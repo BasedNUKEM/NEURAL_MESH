@@ -20,16 +20,20 @@ class Mesh:
     def __init__(self, db_path: str = ":memory:", embedder=embed, link_threshold=0.30,
                  resonance_backend: str = "auto",
                  validator: "ContentValidator | None | bool" = True,
-                 quarantine_policy: str = "strict"):
+                 quarantine_policy: str = "strict",
+                 lexical_backend: str = "bow"):
         if resonance_backend not in {"auto", "python", "rust"}:
             raise ValueError("resonance_backend must be 'auto', 'python', or 'rust'")
         if quarantine_policy not in {"strict", "malicious-only", "off"}:
             raise ValueError("quarantine_policy must be 'strict', 'malicious-only', or 'off'")
+        if lexical_backend not in {"bow", "bm25"}:
+            raise ValueError("lexical_backend must be 'bow' or 'bm25'")
         self.db = sqlite3.connect(db_path)
         self.db.row_factory = sqlite3.Row
         self.embedder = embedder
         self.link_threshold = link_threshold
         self.resonance_backend = resonance_backend
+        self.lexical_backend = lexical_backend
         # Memory-poisoning defense (OWASP ASI06): content is scanned before it
         # enters the mesh. validator=False disables the scan (tests/benchmarks
         # that intentionally store hostile-looking text).
@@ -40,9 +44,11 @@ class Mesh:
         # In-memory node cache so repeated retrieval doesn't reload SQLite every
         # call. `add`/`sleep`/`_supersede` invalidate it via _invalidate_cache.
         self._node_cache: dict | None = None
+        self._bm25_index = None
 
     def _invalidate_cache(self):
         self._node_cache = None
+        self._bm25_index = None
         # lexical embeddings are keyed by content; if a node's content changed
         # (it can't via our API, but be safe) drop them too.
         if hasattr(self, "_lex_cache"):
@@ -369,8 +375,14 @@ class Mesh:
 
     def lexical_recall(self, query: str, top_k: int = 5, writeback: bool = False,
                        lane: "str | None" = None):
-        """Pure lexical (hashed) cosine — exact-keyword retrieval. Catches
-        matches the dense embedder paraphrases away."""
+        """Pure lexical retrieval — exact-keyword matching.
+
+        `lexical_backend="bow"` (default): hashed bag-of-words cosine (see
+        `embed.py`). `lexical_backend="bm25"`: Okapi BM25 full-text scoring
+        (Rust-accelerated when the extension is present).
+        """
+        if self.lexical_backend == "bm25":
+            return self.bm25_recall(query, top_k=top_k, writeback=writeback, lane=lane)
         ql = self._lex_emb(query)
         scored = [(_sim(ql, self._lex_emb(n.content)), n) for n in self._live_nodes(lane)]
         scored.sort(key=lambda x: -x[0])
@@ -378,6 +390,41 @@ class Mesh:
         for n in hits:
             self._touch(n, writeback=writeback)
         return hits
+
+    def bm25_recall(self, query: str, top_k: int = 5, writeback: bool = False,
+                    lane: "str | None" = None):
+        """Okapi BM25 full-text retrieval (Rust-accelerated when available).
+
+        Scores every live node's content against `query` by term-frequency ×
+        inverse-document-frequency with length normalization, and returns the
+        top-k. A real lexical ranker — rare discriminating terms get boosted,
+        common terms are damped — unlike the hashed bag-of-words cosine.
+        """
+        live = self._live_nodes(lane)
+        if not live:
+            return []
+        idx = self._bm25_index_for(live)
+        scores = idx.scores(query)
+        order = sorted(range(len(live)), key=lambda i: -scores[i])
+        hits = [live[i] for i in order[:top_k]]
+        for n in hits:
+            self._touch(n, writeback=writeback)
+        return hits
+
+    def _bm25_index_for(self, live_nodes):
+        """Lazily build (and cache) a BM25 index over the given live nodes.
+
+        The cache is keyed by the node-id tuple so it invalidates whenever the
+        live set changes; `_invalidate_cache` also clears it on mutation.
+        """
+        key = tuple(n.id for n in live_nodes)
+        cached = getattr(self, "_bm25_index", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        from .bm25 import BM25Index
+        idx = BM25Index([n.content or "" for n in live_nodes])
+        self._bm25_index = (key, idx)
+        return idx
 
     def hybrid_recall(self, query: str, top_k: int = 5, alpha: float = 0.5,
                       writeback: bool = False, lane: "str | None" = None):
