@@ -99,7 +99,7 @@ def health():
     return jsonify({
         "status": "ok",
         "nodes": count,
-        "version": "0.27.0",
+        "version": "0.28.0",
         "resonance_backend": mesh.stats()["resonance_backend"],
     })
 
@@ -637,7 +637,7 @@ def mesh_stats():
         "active_nodes": active,
         "consolidated": total - active,
         "quarantined": quarantined,
-        "version": "0.27.0",
+        "version": "0.28.0",
         "provenance_breakdown": provenance_breakdown,
     })
 
@@ -693,7 +693,7 @@ def erc8004_manifest():
             "crypto-economic",
             "cross-source-corroboration",
         ],
-        "version": "0.27.0",
+        "version": "0.28.0",
     })
 
 
