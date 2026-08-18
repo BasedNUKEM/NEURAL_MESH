@@ -25,3 +25,6 @@ dream-consolidation-*.md
 
 # Mesh runtime backups
 mesh.db.bak-*
+
+# LongMemEval oracle + benchmark outputs (large, downloaded)
+data/

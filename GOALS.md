@@ -159,6 +159,9 @@ is only the *policy + broadcast* step.
 
 ## Goal 5 — LongMemEval: real embedder + judge (honest re-score)
 
+**Status: 🟦 DENSE RE-SCORE DONE (2026-08-18)** — real bge-small numbers published
+below; `--judge` (LLM semantic scoring) pending next.
+
 **Outcome:** replace the artifact numbers (bag-of-words substring check) with a
 real `bge-small` embedder + `--judge` run so the LongMemEval row in the README
 stops misleading.
@@ -167,9 +170,35 @@ stops misleading.
 lexical artifacts, not quality. Re-running with real embeds + a judge converts a
 known-weak number into a defensible one (or an honest "we're not competitive yet").
 
+**Real-embedder re-score (2026-08-18, bge-small-en-v1.5 via fastembed, dense,
+top_k=5, 100 cases, wall 2612.9s):**
+
+| Metric | hashed baseline (100) | **real bge-small (100)** |
+|--------|----------------------|--------------------------|
+| contextRecall@1 | 0.070 | **0.090** |
+| contextRecall@5 | 0.066 | **0.112** |
+| MRR | 0.112 | **0.161** |
+
+Per-category (first-100 slice: 60 temporal-reasoning + 40 multi-session):
+temporal ctxR@1=0.083 / ctxR@5=0.113 / MRR=0.135; multi-session
+ctxR@1=0.100 / ctxR@5=0.110 / MRR=0.200.
+
+Honest read: even on the *lexical substring check* (which historically favors the
+hashed bag-of-words embedder), real bge-small surfaces more gold-answer context —
+the semantic embeddings help retrieval, they don't hurt it. Still a lexical
+artifact metric; a real LLM judge is the quality read (pending).
+
+**Harness bug fixed (this milestone):** `--embedder real` constructed
+`RealEmbedder()` in `main()` but never passed it to `run_benchmark`, which fell
+into `Mesh(..., embedder=None)` (breaks — known pitfall). The real embedder was
+never actually used before. Fixed: pass the instance through; `run_benchmark`
+defaults to hashed when None.
+
 ### Acceptance criteria
 🟦 Real-embedder numbers published alongside the hashed baseline.
 🟦 README states plainly which is which.
+🟦 Numbers come from an actual bge-small run (verified embedder= in output).
+🟦 Judge run (Hermes/Nous LLM path) for semantic EM/F1.
 
 ---
 
