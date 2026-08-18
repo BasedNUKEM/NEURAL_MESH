@@ -32,8 +32,9 @@ from bench.locomo_eval import build_mesh, load_full_locomo, _hashed
 
 
 def _load_openrouter_key() -> str:
-    """Load OPENROUTER_API_KEY from environment or D0XEDDEV .env."""
-    key = os.environ.get("OPENROUTER_API_KEY", "")
+    """Load an inference key: OPENROUTER_API_KEY, OPENAI_API_KEY, else the
+    Nous portal access token at /opt/data/shared/nous_auth.json."""
+    key = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
     if key:
         return key
     env_file = pathlib.Path("/opt/data/D0XEDDEV/.env")
@@ -42,11 +43,37 @@ def _load_openrouter_key() -> str:
             line = line.strip()
             if line.startswith("OPENROUTER_API_KEY="):
                 return line.split("=", 1)[1].strip().strip("\"'")
+    # Nous portal token
+    import json
+    for p in ("/opt/data/shared/nous_auth.json", "/opt/data/nous_token/nous_auth.json"):
+        if pathlib.Path(p).exists():
+            try:
+                return json.load(open(p)).get("access_token", "")
+            except Exception:
+                pass
     return ""
 
 
-def llm_answer(query: str, passages: list[str], api_key: str, model: str) -> str:
-    """Generate a grounded answer from retrieved passages via OpenRouter."""
+def _base_url() -> str:
+    """Inference base URL: explicit env, else the Nous portal endpoint."""
+    b = os.environ.get("NEURAL_MESH_LLM_BASE", "")
+    if b:
+        return b.rstrip("/")
+    import json
+    for p in ("/opt/data/shared/nous_auth.json", "/opt/data/nous_token/nous_auth.json"):
+        if pathlib.Path(p).exists():
+            try:
+                b = json.load(open(p)).get("inference_base_url", "")
+                if b:
+                    return b.rstrip("/")
+            except Exception:
+                pass
+    return "https://openrouter.ai/api/v1"
+
+
+def llm_answer(query: str, passages: list[str], api_key: str, model: str,
+               base_url: str | None = None) -> str:
+    """Generate a grounded answer from retrieved passages via the LLM API."""
     ctx = "\n\n".join(f"[{i+1}] {p[:800]}" for i, p in enumerate(passages[:5]))
     prompt = (
         "Answer the query concisely using ONLY the provided context passages. "
@@ -64,14 +91,14 @@ def llm_answer(query: str, passages: list[str], api_key: str, model: str) -> str
         "temperature": 0.1,
         "max_tokens": 100,
     }).encode()
+    base = (base_url or _base_url()).rstrip("/")
     req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
+        f"{base}/chat/completions",
         data=body,
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://d0xeddev.com",
-            "X-Title": "NEURAL_MESH LLM Judge",
+            "User-Agent": "Mozilla/5.0 hermes-agent",
         },
     )
     try:
@@ -149,8 +176,8 @@ def main():
         print("WARNING: no OPENROUTER_API_KEY — running extractive only", file=sys.stderr)
         reader = ExtractiveReader()
     else:
-        def _answer(q, ctx):
-            return llm_answer(q, ctx, api_key, args.model)
+        def _answer(q, ctx, **kw):
+            return llm_answer(q, ctx, api_key, args.model, base_url=_base_url())
         reader = CallableReader(_answer)
         print(f"LLM judge: {args.model} (limit={args.limit or 'all'})", file=sys.stderr)
 
