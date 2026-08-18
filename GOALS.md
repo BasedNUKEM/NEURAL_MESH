@@ -139,45 +139,32 @@ the *other* half of hybrid recall stops paying Python-level costs on large meshe
 
 ---
 
-## Goal 4 — Live Helixa on-chain attestation ⚠️ GO-GATED (code-ready, awaiting funding)
+## Goal 4 — Live Helixa on-chain attestation ✅ DONE (2026-08-18)
 
-**Outcome:** sign and (optionally) broadcast a Helixa attestation for a mesh node.
+**Outcome:** signed + broadcast the standalone NEURAL_MESH identity on Base Mainnet.
 
-**Gate:** this is irreversible (on-chain, costs gas). The signer is already live
-(`degraded:false`). The *broadcast* path is now WIRED but NOT yet exercised
-(awaiting wallet funding).
+### Broadcast (verified on-chain)
+🟦 Tx: `0xb95f97e8ebb1d17a5039b4f8865a993a3384e953c7475343ca021f0d510d6e56`
+🟦 New agentId (token): **63912**
+🟦 Owner: `0x23129c…Ecd9` (verified via `ownerOf(63912)`)
+🟦 Gas: 160668 (~0.000001 ETH at 0.006 gwei)
+🟦 Block: 50147526 · status 1 (success)
+🟦 BaseScan: https://basescan.org/tx/b95f97e8ebb1d17a5039b4f8865a993a3384e953c7475343ca021f0d510d6e56
 
-### Status (2026-08-18) — code-ready, NOT minted
-🟦 **The Helixa ERC-8004 identity is ALREADY on-chain** (July 2026 session):
-   `ownerOf(59322)` and `ownerOf(60155)` = `0x789Bd4…1ce2` (fresh controller).
-   So the *Helixa agent* identity registration is complete — no new mint needed
-   for that intent.
-🟦 **`attest_mesh_node(..., broadcast=True)` now wires a REAL ERC-8004 broadcast**
-   (`helixa_signer._broadcast_attestation`): signs locally + publishes the
-   attestation as a base64 `data:` URI via `IdentityRegistry.register(dataURI)`,
-   returning the actual `tx_hash`. Previously the tx_hash was always empty
-   (broadcast_fn was never wired).
-🟦 **`scripts/erc8004_register.py` ABI fixed** — it assumed full ERC-721
-   (`totalSupply`/`tokenURI`/`Transfer`); the registry is MINIMAL (`register(string)`
-   + `Registered(uint256 indexed, string, address indexed)`). `totalSupply()`
-   reverts "no data". Now uses the correct ABI + decodes agentId from `topic[1]`
-   (NOT `topic[3]`).
+### Fixes that made this possible
+🟦 ERC-8004 ABI corrected (minimal registry: `register(string)` + `Registered(uint256 indexed,string,address indexed)`; no `totalSupply`/`tokenURI`/`Transfer`).
+🟦 agentId decoded from `Registered` topic[1] (not `Transfer` topic[3]).
+🟦 Real `broadcast_fn` wired into `attest_mesh_node(broadcast=True)`.
+🟦 `/helixa/attest-node` accepts `broadcast` flag.
+🟦 Manifest `registrations` now lists BOTH identities (Helixa 5287/60155 + NEURAL_MESH 63912).
 
-### BLOCKED: wallet underfunded (do not broadcast until funded)
-🟦 `agent-wallet.key` = `0x23129c…Ecd9` → **0.000050 ETH**
-🟦 fresh controller `0x789Bd4…1ce2` → **0.000088 ETH**
-🟦 Mint needs **≥0.0003 ETH** (~gas for `register()`). Both wallets are short.
-
-### Remaining steps (once funded — explicit GO still required to spend)
-1. Fund `0x23129c…Ecd9` (or `0x789Bd4…1ce2`) with ≥0.0005 ETH on Base.
-2. `scripts/erc8004_register.py --execute` — mints the standalone NEURAL_MESH identity
-   (OR skip: Helixa identity already covered by agentId 59322).
-3. `signer.attest_mesh_node(<node>, dry_run=False, broadcast=True)` — records a real
-   on-chain attestation with a verified `tx_hash`.
+### Note
+The *Helixa agent* identity (agentId 59322 / helixa 60155) was already on-chain
+from 2026-07-18. This new mint (63912) is a *standalone NEURAL_MESH* identity
+NFT, distinct from the agent — both now on-chain and wired into the manifest.
 
 ### Acceptance criteria
-🟦 On-chain tx hash recorded + verified; node carries `helixa_stamp` with `verified=true`.
-🟦 (Code path + ABI now correct and tested — pending only wallet funding + final GO.)
+🟦 On-chain tx hash recorded + verified (`ownerOf(63912)` = funded wallet; status 1).
 
 ---
 
@@ -273,7 +260,7 @@ must show exactly 4 matches, all the new version.
 | 1 | E2E LLM-judged LoCoMo QA | none (Nous portal path) | no | 🟦 DONE (v0.27.x, Nous model path) |
 | 2 | Subgraph completeness | none | no | 🟦 DONE (v0.28.0) |
 | 3 | Rust BM25 | none | no | 🟦 DONE (v0.28.0) |
-| 4 | Helixa on-chain attestation | **human GO** | **yes** | ⚠️ GO-GATED |
+| 4 | Helixa on-chain attestation | **human GO** | **yes** | 🟦 DONE (agentId 63912) |
 | 5 | LongMemEval re-score | `fastembed` + key | no | next |
 
 **Recommended execution order:** 1 → 2 → 3 (all non-irreversible, bundle in

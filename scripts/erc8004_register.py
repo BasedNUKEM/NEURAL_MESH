@@ -208,8 +208,8 @@ def main():
     bal = w3.eth.get_balance(account.address)
     bal_eth = w3.from_wei(bal, "ether")
     print(f"   Balance: {bal_eth:.6f} ETH (wei: {bal})")
-    if args.execute and bal_eth < 0.0005:
-        print(f"   ⚠️  BALANCE TOO LOW for mint (~0.0002-0.0005 ETH needed).")
+    if args.execute and bal_eth < 0.0001:
+        print(f"   ⚠️  BALANCE TOO LOW for mint (~0.00002-0.0001 ETH needed).")
         print(f"   Fund the wallet first, then rerun with --execute.")
         sys.exit(1)
 

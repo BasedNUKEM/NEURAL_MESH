@@ -686,6 +686,16 @@ def erc8004_manifest():
                 "agentRegistry": ("eip155:8453:"
                                   "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"),
                 "helixaAgentId": 60155,
+            },
+            {
+                "agentId": 63912,
+                "agentRegistry": ("eip155:8453:"
+                                  "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"),
+                "owner": "0x23129c0472172D75bEd1e6dd061301796760Ecd9",
+                "txHash": ("0xb95f97e8ebb1d17a5039b4f8865a993a3384e953"
+                           "c7475343ca021f0d510d6e56"),
+                "mintedAt": "2026-08-18",
+                "note": "Standalone NEURAL_MESH identity NFT (distinct from Helixa agent).",
             }
         ],
         "supportedTrust": [
