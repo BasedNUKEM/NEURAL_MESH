@@ -210,8 +210,12 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
 # ─── Main benchmark ───────────────────────────────────────────────────────
 
 def run_benchmark(cases, top_k=5, mode="dense", judge=False, limit=None,
-                  embedder="hashed", validator=False):
-    """Run LongMemEval benchmark and return per-category + overall metrics."""
+                  embedder=None, validator=False):
+    """Run LongMemEval benchmark and return per-category + overall metrics.
+
+    `embedder` is either a callable embedder instance (e.g. RealEmbedder()) or
+    None, in which case the zero-dep hashed embedder is used.
+    """
     if limit:
         cases = cases[:limit]
 
@@ -222,7 +226,8 @@ def run_benchmark(cases, top_k=5, mode="dense", judge=False, limit=None,
         case_start = time.time()
 
         # Fresh mesh per case (LongMemEval cases are independent)
-        mesh = Mesh(":memory:", embedder=embed if embedder == "hashed" else None,
+        from neural_mesh.embed import embed as _hashed_embed
+        mesh = Mesh(":memory:", embedder=embedder or _hashed_embed,
                      validator=validator)
         node_ids = ingest_case(mesh, case)
 
@@ -354,17 +359,17 @@ def main():
             print("\nUsing fastembed (bge-small-en-v1.5)")
         except ImportError:
             print("\nfastembed not installed — falling back to hashed")
-            embedder = embed
+            embedder = None
             args.embedder = "hashed"
     else:
-        embedder = embed
+        embedder = None
 
     # Run
     print(f"\nRunning benchmark ({args.limit or 500} cases)...\n")
     report = run_benchmark(
         cases, top_k=args.top_k, mode=args.mode,
         judge=args.judge, limit=args.limit,
-        embedder=args.embedder if args.embedder == "hashed" else None,
+        embedder=embedder,
         validator=args.validator,
     )
 
