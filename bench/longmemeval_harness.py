@@ -219,7 +219,10 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 100,
+        # 512 (not 100): v4-pro is a reasoning model and intermittently spends a
+        # small budget entirely on `reasoning`, returning empty `content`.
+        # 100 -> ~33% empty; >=300 -> 0/6 empty in probing.
+        "max_tokens": 512,
         "temperature": 0,
     }
 
@@ -234,6 +237,9 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
                 resp = client.post(url, json=body)
                 result = resp.json()
             candidate = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if not (candidate or "").strip():
+                # reasoning model may have put the answer in `reasoning` instead
+                candidate = result.get("choices", [{}])[0].get("message", {}).get("reasoning", "")
             if candidate and candidate.strip():
                 answer = candidate
                 break
