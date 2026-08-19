@@ -73,7 +73,8 @@ class TestResonanceBackendParity(unittest.TestCase):
                          [node.id for node in python_hits])
 
     def test_mesh_can_pin_resonance_backend(self):
-        mesh = Mesh(":memory:", link_threshold=1.1, resonance_backend="python")
+        mesh = Mesh(":memory:", link_threshold=1.1, resonance_backend="python",
+                    default_recall="resonance")
         mesh.add("alpha deploy", MemoryType.SEMANTIC)
 
         with mock.patch(

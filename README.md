@@ -498,6 +498,52 @@ GENERATIVE LLM JUDGE  (real retrieval, 100 queries, top_k=5, model=deepseek-v4-f
 
 > Reproduce: `OPENROUTER_API_KEY=<nous access_token> PYTHONPATH=. .venv/bin/python bench/locomo_llm_judge.py --locomo locomo10.json --limit 100 --model deepseek/deepseek-v4-flash --mode hybrid`
 
+### LongMemEval retrieval grounding (honest, in progress)
+
+We run the canonical **LongMemEval** (500-case long-term conversational memory)
+harness in `bench/longmemeval_harness.py`: ingest every haystack message as an
+episodic node, retrieve top-k, score retrieval (MRR / contextRecall) and an
+optional LLM judge.
+
+```text
+RETRIEVAL MODE SWEEP  (real bge-small embedder, n=20 temporal-reasoning cases)
+  mode       MRR     cr@1    cr@5
+  hybrid     0.260   0.250   0.160   ← now the Mesh DEFAULT recall()
+  dense      0.238   0.200   0.160
+  resonance  0.238   0.200   0.160
+  lexical    0.225   0.200   0.130
+
+FULL-100 (dense, real embedder, lexical contextRecall — the defensible number):
+  MRR=0.161   cr@1=0.090   cr@5=0.112
+```
+
+**Honest findings:**
+
+1. **Default recall is now `hybrid`.** The sweep shows hybrid edges dense /
+   resonance / lexical on MRR (0.260 vs 0.238 / 0.238 / 0.225). It is the
+   `Mesh()` default as of v0.28.1; explicit `dense` / `lexical` / `resonance`
+   calls are unchanged. Real but **marginal** — ~+0.02 MRR over dense.
+2. **The honest ceiling is retrieval recall, not the judge.** On the full 100
+   cases MRR is **0.16** and cr@1 **0.09** — the right memory node is rarely in
+   the top-5. *No* judge model can score well on context it never retrieves.
+   That is the real gap to attack (chunking, query rewriting, cross-session
+   linkage), and it is independent of which LLM grades the answer.
+3. **The n=20 sweep's absolute MRR (0.26) is NOT a real-world number.** A naive
+   `dataset[:20]` slice happens to be 100% `temporal-reasoning` *and* the easy
+   cases; the full-100 temporal-only MRR is 0.135. We ship only the **relative
+   ranking** (hybrid > dense > lexical) and the full-100 figure. A category-
+   stratified `bench/sample_representative.py` now exists so any future run uses
+   a representative sample (mix matches the 500-set within 1pp).
+4. **LLM-judge F1 is currently NOT a trustworthy number — stated plainly.**
+   Probing the free `tencent/hy3:free` judge: 0/10 empty (good, beats the old
+   v4-pro empty artifact we fixed via `max_tokens` 100→512), but ~50% of answers
+   are rambling meta-text ("Let's extract the timeline…") instead of the answer.
+   We will **not** publish a hy3 F1. A reliable-judge run (v4-pro + 512-token
+   fix, or a stronger free model) on the representative 50-sample is the
+   deferred next step. Until then the judge column stays empty by design.
+
+> Reproduce: `PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --top_k 5 --limit 100`  ·  representative sample: `bench/sample_representative.py --n 50 --seed 7`
+
 ### Associative recall — where resonance *wins* ✅ (and where it doesn't)
 
 LoCoMo is a *single-query → single-answer* task, so flat dense wins there

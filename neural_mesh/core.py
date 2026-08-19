@@ -19,9 +19,13 @@ from .security import (QUARANTINE_LANE, ContentValidator, content_fingerprint,
 class Mesh:
     def __init__(self, db_path: str = ":memory:", embedder=embed, link_threshold=0.30,
                  resonance_backend: str = "auto",
+                 default_recall: str = "hybrid",
                  validator: "ContentValidator | None | bool" = True,
                  quarantine_policy: str = "strict",
                  lexical_backend: str = "bow"):
+        if default_recall not in {"resonance", "hybrid", "dense", "lexical"}:
+            raise ValueError(
+                "default_recall must be 'resonance', 'hybrid', 'dense', or 'lexical'")
         if resonance_backend not in {"auto", "python", "rust"}:
             raise ValueError("resonance_backend must be 'auto', 'python', or 'rust'")
         if quarantine_policy not in {"strict", "malicious-only", "off"}:
@@ -33,6 +37,7 @@ class Mesh:
         self.embedder = embedder
         self.link_threshold = link_threshold
         self.resonance_backend = resonance_backend
+        self.default_recall = default_recall
         self.lexical_backend = lexical_backend
         # Memory-poisoning defense (OWASP ASI06): content is scanned before it
         # enters the mesh. validator=False disables the scan (tests/benchmarks
@@ -318,10 +323,22 @@ class Mesh:
     # ---------- retrieval ----------
     def recall(self, query: str, top_k: int = 5, writeback: bool = False,
                lane: "str | None" = None):
-        """Product-default retrieval: resonance-weighted spreading activation
-        over the dense embedder. Skips superseded (stale) nodes. `writeback`
-        defaults False (no disk write per query) — set True to track access
-        stats for sleep()/consolidate()."""
+        """Product-default retrieval — dispatches on `self.default_recall`.
+
+        Default is `hybrid` (dense+lexical fusion): the LongMemEval retrieval
+        experiment (20-case, bge-small) showed hybrid beats dense/resonance/
+        lexical on MRR (0.260 vs 0.238/0.238/0.225). Falls through to the
+        named recall method. Superseded (stale) nodes are skipped.
+
+        `writeback` defaults False (no disk write per query) — set True to
+        track access stats for sleep()/consolidate()."""
+        if self.default_recall == "hybrid":
+            return self.hybrid_recall(query, top_k=top_k, writeback=writeback, lane=lane)
+        if self.default_recall == "dense":
+            return self.dense_recall(query, top_k=top_k, writeback=writeback, lane=lane)
+        if self.default_recall == "lexical":
+            return self.lexical_recall(query, top_k=top_k, writeback=writeback, lane=lane)
+        # resonance (spreading activation over dense embedder)
         qe = self.embedder(query)
         nodes = {n.id: n for n in self._live_nodes(lane)}
         hits = _resonance_retrieve(

@@ -199,11 +199,23 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
         return {"answer": "", "em": 0.0, "f1": 0.0, "note": "no API key"}
 
     ctx_text = "\n\n".join(c[:500] for c in context_chunks[:5])
+    # NOTE on model behavior: smaller/free judge models (e.g. tencent/hy3:free)
+    # tend to echo the question as a preamble ("We need to parse the
+    # conversation history to answer: ...") instead of emitting the final
+    # answer. That wrecks token-level F1 (~0.02). The guardrails below force a
+    # bare answer and we strip any residual preamble at score time.
     prompt = (
-        f"Based on the following conversation history, answer the question.\n\n"
+        "You are a memory-retrieval grader. Based ONLY on the conversation "
+        "history below, answer the question.\n\n"
+        "RULES:\n"
+        "- Output ONLY the final answer. No explanations, no 'We need to...', "
+        "no restating the question.\n"
+        "- If the answer is a name, place, date, number, or short phrase, "
+        "output exactly that.\n"
+        "- If the history does not contain the answer, output 'UNKNOWN'.\n\n"
         f"CONVERSATION:\n{ctx_text}\n\n"
         f"QUESTION: {query}\n\n"
-        f"Answer concisely in 1-2 sentences."
+        "ANSWER:"
     )
 
     if base_url:
@@ -248,12 +260,30 @@ def judge_answer(query, context_chunks, gold_answer, api_key=None):
             answer = f"[judge error: {e}]"
             break
 
-    # Score
+    # Score — but first strip a common free-judge-model artifact: the model
+    # echoes the question as a quoted substring ("Which vehicle?" ...) before
+    # the real answer. F1 is token-level, so the wrapper tanks the score even
+    # when the right answer follows it. Keep only text AFTER the quoted
+    # question closes. (Residual rambling is not stripped — that is honest
+    # judge-model weakness and should lower F1, not be hidden.)
+    def _strip_preamble(text: str) -> str:
+        import re
+        t = (text or "").strip()
+        if not t:
+            return t
+        m = re.search(r'"[^"]*\?["\']?', t)
+        if m and m.end() < len(t) - 1:
+            after = t[m.end():].strip().strip('"').strip("'").strip()
+            if after and len(after) > 1:
+                t = after
+        return t
+
+    cleaned = _strip_preamble(answer)
     golds = [gold_answer]  # could include aliases
     return {
-        "answer": answer.strip() if answer else "",
-        "em": metric_max_over_ground_truths(em_score, answer, golds),
-        "f1": metric_max_over_ground_truths(f1_score, answer, golds),
+        "answer": cleaned,
+        "em": metric_max_over_ground_truths(em_score, cleaned, golds),
+        "f1": metric_max_over_ground_truths(f1_score, cleaned, golds),
     }
 
 
