@@ -515,6 +515,11 @@ RETRIEVAL MODE SWEEP  (real bge-small embedder, n=20 temporal-reasoning cases)
 
 FULL-100 (dense, real embedder, lexical contextRecall — the defensible number):
   MRR=0.161   cr@1=0.090   cr@5=0.112
+
+REPRESENTATIVE-50 (hybrid default, real bge-small, stratified 50-sample):
+  MRR=0.352   cr@1=0.260   cr@5=0.172
+  + generative LLM judge (deepseek-v4-flash, Nous path, 50/50 answered):
+    Judge EM=0.300   Judge F1=0.405
 ```
 
 **Honest findings:**
@@ -522,27 +527,35 @@ FULL-100 (dense, real embedder, lexical contextRecall — the defensible number)
 1. **Default recall is now `hybrid`.** The sweep shows hybrid edges dense /
    resonance / lexical on MRR (0.260 vs 0.238 / 0.238 / 0.225). It is the
    `Mesh()` default as of v0.28.1; explicit `dense` / `lexical` / `resonance`
-   calls are unchanged. Real but **marginal** — ~+0.02 MRR over dense.
+   calls are unchanged. Real but **marginal** — ~+0.02 MRR over dense on the
+   sweep.
 2. **The honest ceiling is retrieval recall, not the judge.** On the full 100
-   cases MRR is **0.16** and cr@1 **0.09** — the right memory node is rarely in
-   the top-5. *No* judge model can score well on context it never retrieves.
-   That is the real gap to attack (chunking, query rewriting, cross-session
-   linkage), and it is independent of which LLM grades the answer.
+   cases (dense) MRR is **0.16** and cr@1 **0.09** — the right memory node is
+   rarely in the top-5. *No* judge model can score well on context it never
+   retrieves. That is the real gap to attack (chunking, query rewriting,
+   cross-session linkage), and it is independent of which LLM grades the answer.
 3. **The n=20 sweep's absolute MRR (0.26) is NOT a real-world number.** A naive
    `dataset[:20]` slice happens to be 100% `temporal-reasoning` *and* the easy
    cases; the full-100 temporal-only MRR is 0.135. We ship only the **relative
    ranking** (hybrid > dense > lexical) and the full-100 figure. A category-
    stratified `bench/sample_representative.py` now exists so any future run uses
-   a representative sample (mix matches the 500-set within 1pp).
-4. **LLM-judge F1 is currently NOT a trustworthy number — stated plainly.**
-   Probing the free `tencent/hy3:free` judge: 0/10 empty (good, beats the old
-   v4-pro empty artifact we fixed via `max_tokens` 100→512), but ~50% of answers
-   are rambling meta-text ("Let's extract the timeline…") instead of the answer.
-   We will **not** publish a hy3 F1. A reliable-judge run (v4-pro + 512-token
-   fix, or a stronger free model) on the representative 50-sample is the
-   deferred next step. Until then the judge column stays empty by design.
+   a representative sample (mix matches the 500-set within 1pp). The
+   representative-50 hybrid run (MRR 0.352) is the bias-free measurement for
+   *that configuration* — not a claim that hybrid 2×'s the full-100 dense number
+   (different mode + different sample; a hybrid full-100 run is the honest
+   comparison we have not yet run).
+4. **LLM-judge F1 IS now a trustworthy number (v4-flash).** The free
+   `tencent/hy3:free` judge was rejected (0/10 empty-good but ~50% rambling
+   meta-text → unusable). `deepseek/deepseek-v4-flash` via the Nous path is the
+   reliable free judge (same model the LoCoMo judge used): on the representative
+   50-sample it **answered 50/50** with **Judge F1 = 0.405, EM = 0.300**, MRR
+   0.352. Per-category F1: multi-session 0.52, knowledge-update 0.51,
+   single-session-user 0.71, single-session-assistant 0.37, temporal-reasoning
+   0.17, single-session-preference 0.03. Temporal + preference are the weak
+   spots — consistent with LongMemEval's known difficulty (multi-hop time
+   reasoning, fine-grained preference), and the next retrieval targets.
 
-> Reproduce: `PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --top_k 5 --limit 100`  ·  representative sample: `bench/sample_representative.py --n 50 --seed 7`
+> Reproduce: `PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --top_k 5 --limit 100`  ·  representative sample: `bench/sample_representative.py --n 50 --seed 7`  ·  judged hybrid run: `NOUS_JUDGE_MODEL=deepseek/deepseek-v4-flash PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --mode hybrid --judge --limit 50 --dataset data/longmemeval_oracle_sample50.json`
 
 ### Associative recall — where resonance *wins* ✅ (and where it doesn't)
 
