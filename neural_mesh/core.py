@@ -19,7 +19,7 @@ from .security import (QUARANTINE_LANE, ContentValidator, content_fingerprint,
 class Mesh:
     def __init__(self, db_path: str = ":memory:", embedder=embed, link_threshold=0.30,
                  resonance_backend: str = "auto",
-                 default_recall: str = "hybrid",
+                 default_recall: str = "dense",
                  validator: "ContentValidator | None | bool" = True,
                  quarantine_policy: str = "strict",
                  lexical_backend: str = "bow"):

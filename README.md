@@ -516,48 +516,46 @@ RETRIEVAL MODE SWEEP  (real bge-small embedder, n=20 temporal-reasoning cases)
 FULL-100 (dense, real embedder, biased cases[:100] prefix, lexical ctxRecall):
   MRR=0.161   cr@1=0.090   cr@5=0.112   (BIASED SLICE — not representative)
 
-REPRESENTATIVE-100 (hybrid default, real bge-small, stratified 100-sample,
-  category mix matches full 500-set within 1pp — the trustworthy number):
-  MRR=0.283   cr@1=0.210   cr@5=0.142
-  + generative LLM judge (deepseek-v4-flash, Nous path, 100/100 answered):
-    Judge EM=0.250   Judge F1=0.347
+REPRESENTATIVE-100, SAME stratified sample, v4-flash judge — MODE COMPARISON:
+  mode     MRR    cr@1   cr@5   JudgeF1  EM     n
+  hybrid   0.283  0.210  0.142  0.347    0.250  100/100
+  dense    0.277  0.210  0.150  0.362    0.260  100/100
+  paired (same 100 cases): ΔMRR=+0.006  ΔF1=−0.016  (hybrid wins 16 / ties 70 / loses 14)
 ```
 
 **Honest findings:**
 
-1. **Default recall is now `hybrid`.** The sweep shows hybrid edges dense /
-   resonance / lexical on MRR (0.260 vs 0.238 / 0.238 / 0.225). It is the
-   `Mesh()` default as of v0.28.1; explicit `dense` / `lexical` / `resonance`
-   calls are unchanged. Real but **marginal** — ~+0.02 MRR over dense on the
-   sweep.
-2. **The honest ceiling is retrieval recall, not the judge.** The representative
-   100 hybrid run shows MRR **0.283** / cr@1 **0.210** — the right memory node
-   is in the top-5 ~28% of the time. *No* judge model can score well on context
-   it never retrieves. That is the real gap to attack (chunking, query
-   rewriting, cross-session linkage), and it is independent of which LLM grades
-   the answer.
+1. **Hybrid ≈ dense — a TIE at scale, not a win.** The 20-case sweep hinted
+   hybrid +0.02 MRR, but on the same stratified 100-sample the gap collapses to
+   **+0.006 MRR** (noise) and dense is *marginally better* on Judge F1
+   (0.362 vs 0.347) and EM. Per-case: hybrid wins 16, ties 70, loses 14.
+   **`Mesh()` still defaults to `hybrid` (v0.28.1) but that is NOT justified by
+   retrieval quality** — it is a coin-flip that is also ~33% slower per the
+   sweep timing. Recommendation: revert the default to `dense` (equal quality,
+   faster). This is a pending product call, flagged honestly rather than hidden.
+2. **The honest ceiling is retrieval recall, not the judge.** Both modes land at
+   MRR **~0.28** / cr@1 **~0.21** — the right memory node is in the top-5 ~28%
+   of the time. *No* judge model can score well on context it never retrieves.
+   That is the real gap to attack (chunking, query rewriting, cross-session
+   linkage), independent of which LLM grades the answer.
 3. **The earlier dense MRR 0.161 is a BIASED reference, not a clean baseline.**
    It used `dataset[:100]` which is 100% `temporal-reasoning` *and* skewed easy.
-   We keep it only as a historical data point, clearly labeled. The trustworthy
-   comparison is the stratified 100-sample: hybrid → MRR 0.283. A clean
-   dense-vs-hybrid on the *same* stratified 100 has not been run; the directional
-   signal (hybrid > dense) is consistent but not yet measured apples-to-apples.
-   The n=20 sweep (relative ranking: hybrid > dense > lexical) is the only
-   same-cases mode comparison we have.
+   Kept only as a labeled historical data point. The trustworthy comparison is
+   the stratified 100-sample above (hybrid ≈ dense). The n=20 sweep is the only
+   same-cases mode ranking and is now shown to be small-sample noise.
 4. **LLM-judge F1 IS a trustworthy number (v4-flash).** The free
    `tencent/hy3:free` judge was rejected (0/10 empty-good but ~50% rambling
    meta-text → unusable). `deepseek/deepseek-v4-flash` via the Nous path is the
    reliable free judge (same model the LoCoMo judge used): on the representative
-   100-sample it **answered 100/100** with **Judge F1 = 0.347, EM = 0.250**, MRR
-   0.283. Per-category F1: single-session-user 0.72, knowledge-update 0.42,
-   temporal-reasoning 0.30, single-session-assistant 0.29, multi-session 0.25,
-   single-session-preference 0.05. Temporal + preference are the weak spots —
-   consistent with LongMemEval's known difficulty (multi-hop time reasoning,
-   fine-grained preference), and the next retrieval targets. The 50-sample run
-   (F1 0.405) was slightly optimistic; the 100-sample (F1 0.347) is the
-   canonical, reproducible figure.
+   100-sample it **answered 100/100** with **Judge F1 ≈ 0.35, EM ≈ 0.25**, MRR
+   ≈ 0.28 for both modes. Per-category F1 (hybrid): single-session-user 0.72,
+   knowledge-update 0.42, temporal-reasoning 0.30, single-session-assistant
+   0.29, multi-session 0.25, single-session-preference 0.05. Temporal +
+   preference are the weak spots — consistent with LongMemEval's known
+   difficulty (multi-hop time reasoning, fine-grained preference), and the next
+   retrieval targets.
 
-> Reproduce: `PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --top_k 5 --limit 100`  ·  representative sample: `bench/sample_representative.py --n 100 --seed 7`  ·  judged hybrid run: `NOUS_JUDGE_MODEL=deepseek/deepseek-v4-flash PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --mode hybrid --judge --limit 100 --dataset data/longmemeval_oracle_sample100.json`
+> Reproduce: `PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --top_k 5 --limit 100`  ·  representative sample: `bench/sample_representative.py --n 100 --seed 7`  ·  judged run: `NOUS_JUDGE_MODEL=deepseek/deepseek-v4-flash PYTHONPATH=. .venv/bin/python bench/longmemeval_harness.py --embedder real --mode {hybrid|dense} --judge --limit 100 --dataset data/longmemeval_oracle_sample100.json`
 
 ### Associative recall — where resonance *wins* ✅ (and where it doesn't)
 
